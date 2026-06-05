@@ -589,3 +589,130 @@ describe("Durable-layer seeding", () => {
     ).toBeUndefined();
   });
 });
+
+describe("Skeleton invariants", () => {
+  test("fresh session: each stage receives only its own stageId and accumulated prior outputs", async () => {
+    const runtime = new CapturingSequencedRuntime({
+      diagnose: [{ type: "text", content: "found the issue" }],
+      fix: [{ type: "text", content: "applied the fix" }],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+    });
+
+    const diagnoseInput = runtime.inputsFor("diagnose")[0];
+    const fixInput = runtime.inputsFor("fix")[0];
+
+    expect(diagnoseInput.stageId).toBe("diagnose");
+    expect(fixInput.stageId).toBe("fix");
+    // fix sees only the diagnose artifact — no hidden session state carried forward
+    expect(Object.keys(fixInput.artifacts)).toEqual(["diagnose"]);
+  });
+
+  test("chokepoint: audit entry count equals stage count — no action bypasses reach-control", async () => {
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found", tool: "read_file" },
+      fix: { type: "text", content: "fixed", tool: "edit_file" },
+      verify: { type: "text", content: "verified", tool: "read_file" },
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }, { name: "verify" }],
+      runtime,
+      reachControl: { allowedTools: ["read_file", "edit_file"] },
+    });
+
+    const auditPath = join(
+      baseDir,
+      TEST_REPO_KEY,
+      "runs",
+      state.runId,
+      "audit.log"
+    );
+    const raw = await readFile(auditPath, "utf-8");
+    const entries = raw
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+
+    expect(entries).toHaveLength(3);
+  });
+
+  test("audit completeness: every stage appears in the audit log in order with no gaps", async () => {
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found", tool: "read_file" },
+      fix: { type: "text", content: "fixed", tool: "edit_file" },
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+      reachControl: { allowedTools: ["read_file", "edit_file"] },
+    });
+
+    const auditPath = join(
+      baseDir,
+      TEST_REPO_KEY,
+      "runs",
+      state.runId,
+      "audit.log"
+    );
+    const raw = await readFile(auditPath, "utf-8");
+    const entries = raw
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+
+    expect(entries.map((e) => e.stageId)).toEqual(["diagnose", "fix"]);
+  });
+
+  test("full quick-change run: fresh session, chokepoint, and audit completeness hold together", async () => {
+    const runtime = new CapturingSequencedRuntime({
+      diagnose: [
+        { type: "text", content: "found the issue", tool: "read_file" },
+      ],
+      fix: [{ type: "text", content: "applied the fix", tool: "edit_file" }],
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+      reachControl: { allowedTools: ["read_file", "edit_file"] },
+    });
+
+    // Invariant 1: fresh session — each stage has its own stageId, fix sees only diagnose's output
+    expect(runtime.inputsFor("diagnose")[0].stageId).toBe("diagnose");
+    expect(runtime.inputsFor("fix")[0].stageId).toBe("fix");
+    expect(Object.keys(runtime.inputsFor("fix")[0].artifacts)).toEqual([
+      "diagnose",
+    ]);
+
+    // Invariants 2 & 3: every action through the chokepoint, audit log complete and in order
+    const auditPath = join(
+      baseDir,
+      TEST_REPO_KEY,
+      "runs",
+      state.runId,
+      "audit.log"
+    );
+    const raw = await readFile(auditPath, "utf-8");
+    const entries = raw
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.stageId)).toEqual(["diagnose", "fix"]);
+    expect(entries.every((e) => e.decision !== undefined)).toBe(true);
+  });
+});
