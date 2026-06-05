@@ -18,7 +18,7 @@ export interface ExecutionAdapter {
 
 export interface StageDefinition {
   name: string;
-  role?: "worker" | "qa";
+  role?: "worker" | "qa" | "reviewer";
 }
 
 export interface RunState {
@@ -57,5 +57,6 @@ export interface StartRunOptions {
   lane: Lane;
   stages: StageDefinition[];
   runtime?: AgentRuntime;
+  reviewerRuntime?: AgentRuntime;
   adapter?: ExecutionAdapter;
 }

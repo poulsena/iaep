@@ -1,5 +1,5 @@
 import type { StageDefinition, RunState, Lane, AgentRuntime, BranchType, ExecutionAdapter } from "./types";
-import { createFeatureBranch, applyEdits, commitEdits } from "./git-ops";
+import { createFeatureBranch, applyEdits, commitEdits, getDiff } from "./git-ops";
 
 export class WorkflowEngine {
   async run(options: {
@@ -7,6 +7,7 @@ export class WorkflowEngine {
     lane: Lane;
     stages: StageDefinition[];
     runtime: AgentRuntime;
+    reviewerRuntime?: AgentRuntime;
     adapter?: ExecutionAdapter;
     repoPath?: string;
     branchType?: BranchType;
@@ -20,6 +21,29 @@ export class WorkflowEngine {
     }
 
     for (const stage of options.stages) {
+      if (stage.role === "reviewer") {
+        const reviewerArtifacts = { ...artifacts };
+        if (options.repoPath) {
+          reviewerArtifacts["diff"] = await getDiff(options.repoPath);
+        }
+        const action = await options.reviewerRuntime!.execute({
+          stageId: stage.name,
+          runId: options.runId,
+          artifacts: reviewerArtifacts,
+        });
+        if (action.type !== "review-passed") {
+          return {
+            runId: options.runId,
+            lane: options.lane,
+            currentStage: stage.name,
+            gatesPassed,
+            status: "blocked",
+          };
+        }
+        gatesPassed.push(stage.name);
+        continue;
+      }
+
       if (stage.role === "qa") {
         const result = await options.adapter!.test();
         if (!result.success) {

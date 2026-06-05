@@ -21,6 +21,7 @@ export class HeadlessDriver {
       lane: options.lane,
       stages: options.stages,
       runtime,
+      reviewerRuntime: options.reviewerRuntime,
       adapter: options.adapter,
       repoPath: options.repoPath,
       branchType: options.branchType,

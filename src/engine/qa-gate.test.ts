@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { HeadlessDriver } from "./headless-driver";
 import { FakeExecutionAdapter } from "./fake-execution-adapter";
+import { FakeAgentRuntime } from "./fake-agent-runtime";
 
 const TEST_REPO_KEY = "test/repo";
 
@@ -63,5 +64,61 @@ describe("QA gate", () => {
     });
     expect(state.status).toBe("terminal");
     expect(state.currentStage).toBe("terminal");
+  });
+});
+
+describe("QA gate with reviewer", () => {
+  test("review-failed blocks run even when tests are green", async () => {
+    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-failed", content: "code smell" } });
+    const adapter = new FakeExecutionAdapter({ success: true, output: "all passed" });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "review", role: "reviewer" },
+        { name: "qa", role: "qa" },
+      ],
+      reviewerRuntime,
+      adapter,
+    });
+    expect(state.status).toBe("blocked");
+    expect(state.currentStage).toBe("review");
+  });
+
+  test("review-passed and green tests: run reaches terminal with both in gatesPassed", async () => {
+    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-passed", content: "LGTM" } });
+    const adapter = new FakeExecutionAdapter({ success: true, output: "all passed" });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "review", role: "reviewer" },
+        { name: "qa", role: "qa" },
+      ],
+      reviewerRuntime,
+      adapter,
+    });
+    expect(state.status).toBe("terminal");
+    expect(state.gatesPassed).toContain("review");
+    expect(state.gatesPassed).toContain("qa");
+  });
+
+  test("review-passed but red tests: blocked at qa, review still in gatesPassed", async () => {
+    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-passed", content: "LGTM" } });
+    const adapter = new FakeExecutionAdapter({ success: false, output: "2 tests failed" });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "review", role: "reviewer" },
+        { name: "qa", role: "qa" },
+      ],
+      reviewerRuntime,
+      adapter,
+    });
+    expect(state.status).toBe("blocked");
+    expect(state.currentStage).toBe("qa");
+    expect(state.gatesPassed).toContain("review");
+    expect(state.gatesPassed).not.toContain("qa");
   });
 });

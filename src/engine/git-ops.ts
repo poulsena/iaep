@@ -22,3 +22,12 @@ export async function commitEdits(repoPath: string, stageName: string): Promise<
   await exec("git", ["add", "."], { cwd: repoPath });
   await exec("git", ["commit", "-m", `Worker: ${stageName}`], { cwd: repoPath });
 }
+
+export async function getDiff(repoPath: string): Promise<string> {
+  try {
+    const { stdout } = await exec("git", ["diff", "main...HEAD"], { cwd: repoPath });
+    return stdout;
+  } catch {
+    return "";
+  }
+}
