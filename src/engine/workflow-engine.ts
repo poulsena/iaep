@@ -1,4 +1,4 @@
-import type { StageDefinition, RunState, Lane, AgentRuntime, BranchType } from "./types";
+import type { StageDefinition, RunState, Lane, AgentRuntime, BranchType, ExecutionAdapter } from "./types";
 import { createFeatureBranch, applyEdits, commitEdits } from "./git-ops";
 
 export class WorkflowEngine {
@@ -7,17 +7,34 @@ export class WorkflowEngine {
     lane: Lane;
     stages: StageDefinition[];
     runtime: AgentRuntime;
+    adapter?: ExecutionAdapter;
     repoPath?: string;
     branchType?: BranchType;
     saveArtifact: (stageId: string, content: string) => Promise<void>;
   }): Promise<RunState> {
     const artifacts: Record<string, string> = {};
+    const gatesPassed: string[] = [];
 
     if (options.repoPath && options.stages.some(s => s.role === "worker")) {
       await createFeatureBranch(options.repoPath, options.branchType ?? "feature", options.runId);
     }
 
     for (const stage of options.stages) {
+      if (stage.role === "qa") {
+        const result = await options.adapter!.test();
+        if (!result.success) {
+          return {
+            runId: options.runId,
+            lane: options.lane,
+            currentStage: stage.name,
+            gatesPassed,
+            status: "blocked",
+          };
+        }
+        gatesPassed.push(stage.name);
+        continue;
+      }
+
       const action = await options.runtime.execute({
         stageId: stage.name,
         runId: options.runId,
@@ -39,7 +56,7 @@ export class WorkflowEngine {
       runId: options.runId,
       lane: options.lane,
       currentStage: "terminal",
-      gatesPassed: [],
+      gatesPassed,
       status: "terminal",
     };
   }

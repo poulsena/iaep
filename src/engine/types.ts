@@ -1,9 +1,24 @@
 export type Lane = "quick-change" | "full-feature";
 export type BranchType = "feature" | "fix" | "chore" | "refactor" | "docs";
 
+export interface BuildResult {
+  success: boolean;
+  output: string;
+}
+
+export interface TestResult {
+  success: boolean;
+  output: string;
+}
+
+export interface ExecutionAdapter {
+  build(): Promise<BuildResult>;
+  test(): Promise<TestResult>;
+}
+
 export interface StageDefinition {
   name: string;
-  role?: "worker";
+  role?: "worker" | "qa";
 }
 
 export interface RunState {
@@ -11,7 +26,7 @@ export interface RunState {
   lane: Lane;
   currentStage: string;
   gatesPassed: string[];
-  status: "running" | "terminal";
+  status: "running" | "terminal" | "blocked";
 }
 
 export interface FileEdit {
@@ -42,4 +57,5 @@ export interface StartRunOptions {
   lane: Lane;
   stages: StageDefinition[];
   runtime?: AgentRuntime;
+  adapter?: ExecutionAdapter;
 }
