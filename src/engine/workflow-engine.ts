@@ -38,11 +38,14 @@ export class WorkflowEngine {
 
     for (const stage of options.stages) {
       if (stage.role === "reviewer") {
+        if (!options.reviewerRuntime) {
+          throw new Error("reviewer stage requires reviewerRuntime");
+        }
         const reviewerArtifacts = { ...artifacts };
         if (options.repoPath) {
           reviewerArtifacts.diff = await getDiff(options.repoPath);
         }
-        const action = await options.reviewerRuntime?.execute({
+        const action = await options.reviewerRuntime.execute({
           stageId: stage.name,
           runId: options.runId,
           artifacts: reviewerArtifacts,
@@ -61,7 +64,10 @@ export class WorkflowEngine {
       }
 
       if (stage.role === "qa") {
-        const result = await options.adapter?.test();
+        if (!options.adapter) {
+          throw new Error("qa stage requires adapter");
+        }
+        const result = await options.adapter.test();
         if (!result.success) {
           return {
             runId: options.runId,
