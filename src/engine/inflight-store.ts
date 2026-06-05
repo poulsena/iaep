@@ -21,6 +21,21 @@ export class InFlightStore {
     }
   }
 
+  async saveArtifact(repoKey: string, runId: string, stageId: string, content: string): Promise<void> {
+    const dir = join(this.baseDir, repoKey, "runs", runId, "artifacts");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, `${stageId}.md`), content);
+  }
+
+  async loadArtifact(repoKey: string, runId: string, stageId: string): Promise<string | null> {
+    const path = join(this.baseDir, repoKey, "runs", runId, "artifacts", `${stageId}.md`);
+    try {
+      return await readFile(path, "utf-8");
+    } catch {
+      return null;
+    }
+  }
+
   runPath(repoKey: string, runId: string): string {
     return join(this.baseDir, repoKey, "runs", runId, "run.json");
   }

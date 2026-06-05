@@ -12,8 +12,24 @@ export interface RunState {
   status: "running" | "terminal";
 }
 
+export interface AgentAction {
+  type: string;
+  content: string;
+}
+
+export interface StageInput {
+  stageId: string;
+  runId: string;
+  artifacts: Record<string, string>;
+}
+
+export interface AgentRuntime {
+  execute(input: StageInput): Promise<AgentAction>;
+}
+
 export interface StartRunOptions {
   repoKey: string;
   lane: Lane;
   stages: StageDefinition[];
+  runtime?: AgentRuntime;
 }

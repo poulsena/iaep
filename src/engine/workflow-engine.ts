@@ -1,7 +1,27 @@
-import type { StageDefinition, RunState, Lane } from "./types";
+import type { StageDefinition, RunState, Lane, AgentRuntime } from "./types";
 
 export class WorkflowEngine {
-  run(options: { runId: string; lane: Lane; stages: StageDefinition[] }): RunState {
+  async run(options: {
+    runId: string;
+    lane: Lane;
+    stages: StageDefinition[];
+    runtime: AgentRuntime;
+    saveArtifact: (stageId: string, content: string) => Promise<void>;
+  }): Promise<RunState> {
+    const artifacts: Record<string, string> = {};
+
+    for (const stage of options.stages) {
+      const action = await options.runtime.execute({
+        stageId: stage.name,
+        runId: options.runId,
+        artifacts,
+      });
+      if (action.content) {
+        await options.saveArtifact(stage.name, action.content);
+        artifacts[stage.name] = action.content;
+      }
+    }
+
     return {
       runId: options.runId,
       lane: options.lane,

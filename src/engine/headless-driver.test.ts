@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { HeadlessDriver } from "./headless-driver";
 import { InFlightStore } from "./inflight-store";
+import { FakeAgentRuntime } from "./fake-agent-runtime";
 
 const TEST_REPO_KEY = "test/repo";
 const QUICK_CHANGE_NOOP = {
@@ -58,6 +59,44 @@ describe("HeadlessDriver", () => {
     const reloaded = await freshStore.load(TEST_REPO_KEY, state.runId);
 
     expect(reloaded).toEqual(state);
+  });
+
+  test("scripted runtime action is written as an artifact for the stage", async () => {
+    const runtime = new FakeAgentRuntime({
+      "no-op": { type: "text", content: "hello from no-op" },
+    });
+    const state = await driver.startRun({ ...QUICK_CHANGE_NOOP, runtime });
+    const store = new InFlightStore(baseDir);
+    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "no-op");
+    expect(artifact).toBe("hello from no-op");
+  });
+
+  test("artifacts from all stages are on disk and loadable from a fresh store after the run", async () => {
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found the bug" },
+      fix: { type: "text", content: "applied the fix" },
+    });
+    const twoStageRun = {
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change" as const,
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+    };
+    const state = await driver.startRun(twoStageRun);
+
+    const freshStore = new InFlightStore(baseDir);
+    const diagnoseArtifact = await freshStore.loadArtifact(TEST_REPO_KEY, state.runId, "diagnose");
+    const fixArtifact = await freshStore.loadArtifact(TEST_REPO_KEY, state.runId, "fix");
+    expect(diagnoseArtifact).toBe("found the bug");
+    expect(fixArtifact).toBe("applied the fix");
+  });
+
+  test("no artifact file is written when the runtime returns empty content", async () => {
+    const runtime = new FakeAgentRuntime({});
+    const state = await driver.startRun({ ...QUICK_CHANGE_NOOP, runtime });
+    const store = new InFlightStore(baseDir);
+    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "no-op");
+    expect(artifact).toBeNull();
   });
 
   test("in-flight store writes outside the repository directory", async () => {
