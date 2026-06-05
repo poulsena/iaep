@@ -24,6 +24,10 @@ type ReviewOutcome =
       rejectionCount: number;
     };
 
+type DefaultStageOutcome =
+  | { type: "blocked" }
+  | { type: "completed"; artifacts: Record<string, string> };
+
 export class WorkflowEngine {
   async run(options: {
     runId: string;
@@ -34,11 +38,16 @@ export class WorkflowEngine {
     adapter?: ExecutionAdapter;
     repoPath?: string;
     branchType?: BranchType;
+    maxRetries?: number;
+    startIndex?: number;
+    initialArtifacts?: Record<string, string>;
+    initialGatesPassed?: string[];
+    initialRejectionCount?: number;
     saveArtifact: (stageId: string, content: string) => Promise<void>;
   }): Promise<RunState> {
-    let artifacts: Record<string, string> = {};
-    const gatesPassed: string[] = [];
-    let rejectionCount = 0;
+    let artifacts: Record<string, string> = options.initialArtifacts ?? {};
+    const gatesPassed: string[] = options.initialGatesPassed ?? [];
+    let rejectionCount = options.initialRejectionCount ?? 0;
     let workerStageIndex = -1;
     let preWorkerArtifacts: Record<string, string> = {};
 
@@ -50,7 +59,7 @@ export class WorkflowEngine {
       );
     }
 
-    let i = 0;
+    let i = options.startIndex ?? 0;
     while (i < options.stages.length) {
       const stage = options.stages[i];
 
@@ -72,6 +81,7 @@ export class WorkflowEngine {
           rejectionCount,
           options.runId,
           options.repoPath,
+          options.maxRetries ?? 2,
           options.saveArtifact
         );
         if (outcome.type === "loopback") {
@@ -96,11 +106,8 @@ export class WorkflowEngine {
       }
 
       if (stage.role === "qa") {
-        if (!options.adapter) {
-          throw new Error("qa stage requires adapter");
-        }
-        const result = await options.adapter.test();
-        if (!result.success) {
+        const passed = await this.runQaStage(options.adapter);
+        if (!passed) {
           return {
             runId: options.runId,
             lane: options.lane,
@@ -115,13 +122,15 @@ export class WorkflowEngine {
         continue;
       }
 
-      const action = await options.runtime.execute({
-        stageId: stage.name,
-        runId: options.runId,
-        artifacts: { ...artifacts },
-      });
-
-      if (action.type === "blocked") {
+      const result = await this.runDefaultStage(
+        stage,
+        options.runtime,
+        options.runId,
+        artifacts,
+        options.repoPath,
+        options.saveArtifact
+      );
+      if (result.type === "blocked") {
         return {
           runId: options.runId,
           lane: options.lane,
@@ -131,13 +140,7 @@ export class WorkflowEngine {
           status: "blocked",
         };
       }
-
-      await this.applyWorkerEdits(stage, action, options.repoPath);
-
-      if (action.content) {
-        await options.saveArtifact(stage.name, action.content);
-        artifacts[stage.name] = action.content;
-      }
+      artifacts = result.artifacts;
 
       i++;
     }
@@ -161,6 +164,7 @@ export class WorkflowEngine {
     rejectionCount: number,
     runId: string,
     repoPath: string | undefined,
+    maxRetries: number,
     saveArtifact: (stageId: string, content: string) => Promise<void>
   ): Promise<ReviewOutcome> {
     const reviewerArtifacts = { ...artifacts };
@@ -173,7 +177,7 @@ export class WorkflowEngine {
       artifacts: reviewerArtifacts,
     });
 
-    if (action.type === "review-rejected" && rejectionCount < 1) {
+    if (action.type === "review-rejected" && rejectionCount < maxRetries) {
       return this.buildLoopback(
         stage.name,
         action,
@@ -215,6 +219,44 @@ export class WorkflowEngine {
       artifacts,
       rejectionCount: rejectionCount + 1,
     };
+  }
+
+  private async runQaStage(
+    adapter: ExecutionAdapter | undefined
+  ): Promise<boolean> {
+    if (!adapter) {
+      throw new Error("qa stage requires adapter");
+    }
+    const result = await adapter.test();
+    return result.success;
+  }
+
+  private async runDefaultStage(
+    stage: StageDefinition,
+    runtime: AgentRuntime,
+    runId: string,
+    artifacts: Record<string, string>,
+    repoPath: string | undefined,
+    saveArtifact: (stageId: string, content: string) => Promise<void>
+  ): Promise<DefaultStageOutcome> {
+    const action = await runtime.execute({
+      stageId: stage.name,
+      runId,
+      artifacts: { ...artifacts },
+    });
+
+    if (action.type === "blocked") {
+      return { type: "blocked" };
+    }
+
+    await this.applyWorkerEdits(stage, action, repoPath);
+
+    const updated = { ...artifacts };
+    if (action.content) {
+      await saveArtifact(stage.name, action.content);
+      updated[stage.name] = action.content;
+    }
+    return { type: "completed", artifacts: updated };
   }
 
   private async applyWorkerEdits(

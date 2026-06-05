@@ -73,6 +73,7 @@ export interface StartRunOptions {
   ) => Promise<"approve" | "deny">;
   branchType?: BranchType;
   lane: Lane;
+  maxRetries?: number;
   reachControl?: ReachControlOptions;
   repoKey: string;
   repoPath?: string;

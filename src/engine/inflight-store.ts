@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunState } from "./types";
 
@@ -50,6 +50,28 @@ export class InFlightStore {
     } catch {
       return null;
     }
+  }
+
+  async loadAllArtifacts(
+    repoKey: string,
+    runId: string
+  ): Promise<Record<string, string>> {
+    const dir = join(this.baseDir, repoKey, "runs", runId, "artifacts");
+    let files: string[];
+    try {
+      files = await readdir(dir);
+    } catch {
+      return {};
+    }
+    const entries = await Promise.all(
+      files
+        .filter((f) => f.endsWith(".md"))
+        .map(async (f) => {
+          const content = await readFile(join(dir, f), "utf-8");
+          return [f.slice(0, -3), content] as [string, string];
+        })
+    );
+    return Object.fromEntries(entries);
   }
 
   runPath(repoKey: string, runId: string): string {

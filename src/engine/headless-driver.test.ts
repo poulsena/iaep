@@ -262,7 +262,55 @@ describe("Rejection loop-back", () => {
     ).toBeUndefined();
   });
 
-  test("second rejection blocks the run", async () => {
+  test("second rejection blocks the run when maxRetries is 1", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "still not good enough" },
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 1,
+    });
+
+    expect(state.status).toBe("blocked");
+    expect(state.rejectionCount).toBe(2);
+  });
+
+  test("retry budget of 0 means first rejection blocks the run", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 0,
+    });
+
+    expect(state.status).toBe("blocked");
+    expect(state.rejectionCount).toBe(1);
+  });
+
+  test("default retry budget is 2: third rejection blocks the run", async () => {
     const workerRuntime = new FakeAgentRuntime({
       implementation: { type: "text", content: "implemented" },
     });
@@ -282,6 +330,139 @@ describe("Rejection loop-back", () => {
     });
 
     expect(state.status).toBe("blocked");
-    expect(state.rejectionCount).toBe(2);
+    expect(state.rejectionCount).toBe(3);
+  });
+});
+
+describe("Human-escalation resumability", () => {
+  const stages = [
+    { name: "implementation", role: "worker" as const },
+    { name: "review", role: "reviewer" as const },
+  ];
+
+  test("an approved resume of a parked run reaches terminal", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+
+    const parkedState = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 0,
+    });
+
+    expect(parkedState.status).toBe("blocked");
+
+    // Simulate restart: fresh driver, same baseDir
+    const freshDriver = new HeadlessDriver({ baseDir });
+    const resumedState = await freshDriver.resumeRun({
+      repoKey: TEST_REPO_KEY,
+      runId: parkedState.runId,
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      decision: "approved",
+    });
+
+    expect(resumedState.status).toBe("terminal");
+    expect(resumedState.currentStage).toBe("terminal");
+  });
+
+  test("a denied resume keeps the run blocked", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+
+    const parkedState = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 0,
+    });
+
+    const freshDriver = new HeadlessDriver({ baseDir });
+    const resumedState = await freshDriver.resumeRun({
+      repoKey: TEST_REPO_KEY,
+      runId: parkedState.runId,
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      decision: "denied",
+    });
+
+    expect(resumedState.status).toBe("blocked");
+  });
+
+  test("resumed run includes reviewer stage in gatesPassed", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+
+    const parkedState = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 0,
+    });
+
+    const freshDriver = new HeadlessDriver({ baseDir });
+    const resumedState = await freshDriver.resumeRun({
+      repoKey: TEST_REPO_KEY,
+      runId: parkedState.runId,
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      decision: "approved",
+    });
+
+    expect(resumedState.gatesPassed).toContain("review");
+  });
+
+  test("resumed run state is persisted to disk", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+
+    const parkedState = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      maxRetries: 0,
+    });
+
+    const freshDriver = new HeadlessDriver({ baseDir });
+    await freshDriver.resumeRun({
+      repoKey: TEST_REPO_KEY,
+      runId: parkedState.runId,
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime,
+      decision: "approved",
+    });
+
+    const store = new InFlightStore(baseDir);
+    const reloaded = await store.load(TEST_REPO_KEY, parkedState.runId);
+    expect(reloaded?.status).toBe("terminal");
   });
 });
