@@ -18,16 +18,17 @@ export interface ExecutionAdapter {
 
 export interface StageDefinition {
   name: string;
-  role?: "worker" | "qa" | "reviewer";
+  role?: "worker" | "qa" | "reviewer" | "librarian";
 }
 
 export interface RunState {
   currentStage: string;
+  featureBranch?: string;
   gatesPassed: string[];
   lane: Lane;
   rejectionCount: number;
   runId: string;
-  status: "running" | "terminal" | "blocked";
+  status: "running" | "terminal" | "blocked" | "merged";
 }
 
 export interface FileEdit {
@@ -74,6 +75,7 @@ export interface StartRunOptions {
   branchType?: BranchType;
   lane: Lane;
   maxRetries?: number;
+  mergeGate?: (runId: string) => Promise<"approve" | "deny">;
   reachControl?: ReachControlOptions;
   repoKey: string;
   repoPath?: string;

@@ -29,10 +29,18 @@ export async function applyEdits(
 
 export async function commitEdits(
   repoPath: string,
-  stageName: string
+  message: string
 ): Promise<void> {
   await exec("git", ["add", "."], { cwd: repoPath });
-  await exec("git", ["commit", "-m", `Worker: ${stageName}`], {
+  await exec("git", ["commit", "-m", message], { cwd: repoPath });
+}
+
+export async function mergeToMain(
+  repoPath: string,
+  featureBranch: string
+): Promise<void> {
+  await exec("git", ["checkout", "main"], { cwd: repoPath });
+  await exec("git", ["merge", "--no-ff", featureBranch, "-m", `Merge ${featureBranch}`], {
     cwd: repoPath,
   });
 }

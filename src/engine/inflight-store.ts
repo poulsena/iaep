@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunState } from "./types";
 
@@ -72,6 +72,11 @@ export class InFlightStore {
         })
     );
     return Object.fromEntries(entries);
+  }
+
+  async clearRun(repoKey: string, runId: string): Promise<void> {
+    const dir = join(this.baseDir, repoKey, "runs", runId);
+    await rm(dir, { recursive: true, force: true });
   }
 
   runPath(repoKey: string, runId: string): string {
