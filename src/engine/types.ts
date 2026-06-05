@@ -25,6 +25,7 @@ export interface RunState {
   currentStage: string;
   gatesPassed: string[];
   lane: Lane;
+  rejectionCount: number;
   runId: string;
   status: "running" | "terminal" | "blocked";
 }
