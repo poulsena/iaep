@@ -21,6 +21,8 @@ export class HeadlessDriver {
       lane: options.lane,
       stages: options.stages,
       runtime,
+      repoPath: options.repoPath,
+      branchType: options.branchType,
       saveArtifact: (stageId, content) =>
         this.store.saveArtifact(options.repoKey, runId, stageId, content),
     });

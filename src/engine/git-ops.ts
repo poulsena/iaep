@@ -1,0 +1,24 @@
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { mkdir, writeFile } from "fs/promises";
+import { dirname, join } from "path";
+import type { BranchType, FileEdit } from "./types";
+
+const exec = promisify(execFile);
+
+export async function createFeatureBranch(repoPath: string, branchType: BranchType, runId: string): Promise<void> {
+  await exec("git", ["checkout", "-b", `${branchType}/${runId}`], { cwd: repoPath });
+}
+
+export async function applyEdits(repoPath: string, edits: FileEdit[]): Promise<void> {
+  for (const edit of edits) {
+    const fullPath = join(repoPath, edit.path);
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, edit.content);
+  }
+}
+
+export async function commitEdits(repoPath: string, stageName: string): Promise<void> {
+  await exec("git", ["add", "."], { cwd: repoPath });
+  await exec("git", ["commit", "-m", `Worker: ${stageName}`], { cwd: repoPath });
+}

@@ -1,0 +1,109 @@
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { HeadlessDriver } from "./headless-driver";
+import { InFlightStore } from "./inflight-store";
+import { FakeAgentRuntime } from "./fake-agent-runtime";
+
+const exec = promisify(execFile);
+
+const TEST_REPO_KEY = "test/repo";
+
+async function git(cwd: string, ...args: string[]): Promise<string> {
+  const { stdout } = await exec("git", args, { cwd });
+  return stdout.trim();
+}
+
+let baseDir: string;
+let repoDir: string;
+let driver: HeadlessDriver;
+
+beforeEach(async () => {
+  baseDir = await mkdtemp(join(tmpdir(), "iaep-store-"));
+  repoDir = await mkdtemp(join(tmpdir(), "iaep-repo-"));
+
+  await git(repoDir, "init", "-b", "main");
+  await git(repoDir, "config", "user.email", "test@test.com");
+  await git(repoDir, "config", "user.name", "Test");
+  await writeFile(join(repoDir, "README.md"), "initial");
+  await git(repoDir, "add", ".");
+  await git(repoDir, "commit", "-m", "initial commit");
+
+  driver = new HeadlessDriver({ baseDir });
+});
+
+afterEach(async () => {
+  await Promise.all([
+    rm(baseDir, { recursive: true, force: true }),
+    rm(repoDir, { recursive: true, force: true }),
+  ]);
+});
+
+const SCRIPTED_EDIT = {
+  type: "edit",
+  content: "Added foo constant to foo.ts",
+  edits: [{ path: "src/foo.ts", content: "export const foo = 1;" }],
+};
+
+describe("Worker stage", () => {
+  test("creates a feature branch in the repo", async () => {
+    const runtime = new FakeAgentRuntime({ implementation: SCRIPTED_EDIT });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      repoPath: repoDir,
+      branchType: "feature",
+      lane: "quick-change",
+      stages: [{ name: "implementation", role: "worker" }],
+      runtime,
+    });
+    const branches = await git(repoDir, "branch", "--list", `feature/${state.runId}`);
+    expect(branches).not.toBe("");
+  });
+
+  test("main branch HEAD is untouched after the worker stage", async () => {
+    const mainHeadBefore = await git(repoDir, "rev-parse", "main");
+    const runtime = new FakeAgentRuntime({ implementation: SCRIPTED_EDIT });
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      repoPath: repoDir,
+      branchType: "fix",
+      lane: "quick-change",
+      stages: [{ name: "implementation", role: "worker" }],
+      runtime,
+    });
+    const mainHeadAfter = await git(repoDir, "rev-parse", "main");
+    expect(mainHeadAfter).toBe(mainHeadBefore);
+  });
+
+  test("diff-summary artifact is written to the in-flight store", async () => {
+    const runtime = new FakeAgentRuntime({ implementation: SCRIPTED_EDIT });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      repoPath: repoDir,
+      branchType: "feature",
+      lane: "quick-change",
+      stages: [{ name: "implementation", role: "worker" }],
+      runtime,
+    });
+    const store = new InFlightStore(baseDir);
+    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "implementation");
+    expect(artifact).toBe(SCRIPTED_EDIT.content);
+  });
+
+  test("edited file is committed on the feature branch", async () => {
+    const runtime = new FakeAgentRuntime({ implementation: SCRIPTED_EDIT });
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      repoPath: repoDir,
+      branchType: "feature",
+      lane: "quick-change",
+      stages: [{ name: "implementation", role: "worker" }],
+      runtime,
+    });
+    const fileOnBranch = await git(repoDir, "show", `feature/${state.runId}:src/foo.ts`);
+    expect(fileOnBranch).toBe(SCRIPTED_EDIT.edits[0].content);
+  });
+});

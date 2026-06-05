@@ -1,7 +1,9 @@
 export type Lane = "quick-change" | "full-feature";
+export type BranchType = "feature" | "fix" | "chore" | "refactor" | "docs";
 
 export interface StageDefinition {
   name: string;
+  role?: "worker";
 }
 
 export interface RunState {
@@ -12,9 +14,15 @@ export interface RunState {
   status: "running" | "terminal";
 }
 
+export interface FileEdit {
+  path: string;
+  content: string;
+}
+
 export interface AgentAction {
   type: string;
   content: string;
+  edits?: FileEdit[];
 }
 
 export interface StageInput {
@@ -29,6 +37,8 @@ export interface AgentRuntime {
 
 export interface StartRunOptions {
   repoKey: string;
+  repoPath?: string;
+  branchType?: BranchType;
   lane: Lane;
   stages: StageDefinition[];
   runtime?: AgentRuntime;
