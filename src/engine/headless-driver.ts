@@ -133,7 +133,11 @@ export class HeadlessDriver {
       reviewerRuntime: options.reviewerRuntime,
       mergeGate: options.mergeGate,
       repoPath: options.repoPath,
-      branchType: options.branchType ?? parked.featureBranch?.split("/")[0] as import("./types").BranchType | undefined,
+      branchType:
+        options.branchType ??
+        (parked.featureBranch?.split("/")[0] as
+          | import("./types").BranchType
+          | undefined),
       startIndex,
       initialArtifacts: artifacts,
       initialGatesPassed,

@@ -40,9 +40,11 @@ export async function mergeToMain(
   featureBranch: string
 ): Promise<void> {
   await exec("git", ["checkout", "main"], { cwd: repoPath });
-  await exec("git", ["merge", "--no-ff", featureBranch, "-m", `Merge ${featureBranch}`], {
-    cwd: repoPath,
-  });
+  await exec(
+    "git",
+    ["merge", "--no-ff", featureBranch, "-m", `Merge ${featureBranch}`],
+    { cwd: repoPath }
+  );
 }
 
 export async function getDiff(repoPath: string): Promise<string> {

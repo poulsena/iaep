@@ -31,42 +31,52 @@ type DefaultStageOutcome =
   | { type: "blocked" }
   | { type: "completed"; artifacts: Record<string, string> };
 
+interface RunOptions {
+  adapter?: ExecutionAdapter;
+  branchType?: BranchType;
+  initialArtifacts?: Record<string, string>;
+  initialGatesPassed?: string[];
+  initialRejectionCount?: number;
+  lane: Lane;
+  maxRetries?: number;
+  mergeGate?: (runId: string) => Promise<"approve" | "deny">;
+  repoPath?: string;
+  reviewerRuntime?: AgentRuntime;
+  runId: string;
+  runtime: AgentRuntime;
+  saveArtifact: (stageId: string, content: string) => Promise<void>;
+  stages: StageDefinition[];
+  startIndex?: number;
+}
+
 export class WorkflowEngine {
-  async run(options: {
-    runId: string;
-    lane: Lane;
-    stages: StageDefinition[];
-    runtime: AgentRuntime;
-    reviewerRuntime?: AgentRuntime;
-    adapter?: ExecutionAdapter;
-    repoPath?: string;
-    branchType?: BranchType;
-    maxRetries?: number;
-    mergeGate?: (runId: string) => Promise<"approve" | "deny">;
-    startIndex?: number;
-    initialArtifacts?: Record<string, string>;
-    initialGatesPassed?: string[];
-    initialRejectionCount?: number;
-    saveArtifact: (stageId: string, content: string) => Promise<void>;
-  }): Promise<RunState> {
+  async run(options: RunOptions): Promise<RunState> {
     let artifacts: Record<string, string> = options.initialArtifacts ?? {};
     if (options.repoPath) {
       const durable = await readDurableContext(options.repoPath);
       artifacts = { ...durable, ...artifacts };
     }
-    const gatesPassed: string[] = options.initialGatesPassed ?? [];
-    let rejectionCount = options.initialRejectionCount ?? 0;
-    let workerStageIndex = -1;
-    let preWorkerArtifacts: Record<string, string> = {};
     const branchType = options.branchType ?? "feature";
     const featureBranch = `${branchType}/${options.runId}`;
-
     const needsBranch = options.stages.some(
       (s) => s.role === "worker" || s.role === "librarian"
     );
     if (options.repoPath && needsBranch && !options.startIndex) {
       await createFeatureBranch(options.repoPath, branchType, options.runId);
     }
+    return this.executeStages(options, artifacts, featureBranch);
+  }
+
+  private async executeStages(
+    options: RunOptions,
+    initialArtifacts: Record<string, string>,
+    featureBranch: string
+  ): Promise<RunState> {
+    let artifacts = initialArtifacts;
+    const gatesPassed: string[] = options.initialGatesPassed ?? [];
+    let rejectionCount = options.initialRejectionCount ?? 0;
+    let workerStageIndex = -1;
+    let preWorkerArtifacts: Record<string, string> = {};
 
     let i = options.startIndex ?? 0;
     while (i < options.stages.length) {
@@ -184,7 +194,6 @@ export class WorkflowEngine {
         };
       }
       artifacts = result.artifacts;
-
       i++;
     }
 
@@ -289,7 +298,9 @@ export class WorkflowEngine {
     }
 
     if (repoPath && action.content) {
-      await applyEdits(repoPath, [{ path: "CONTEXT.md", content: action.content }]);
+      await applyEdits(repoPath, [
+        { path: "CONTEXT.md", content: action.content },
+      ]);
       await commitEdits(repoPath, `Librarian: ${stage.name}`);
     }
 
