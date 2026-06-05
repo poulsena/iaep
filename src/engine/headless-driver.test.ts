@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -464,5 +464,89 @@ describe("Human-escalation resumability", () => {
     const store = new InFlightStore(baseDir);
     const reloaded = await store.load(TEST_REPO_KEY, parkedState.runId);
     expect(reloaded?.status).toBe("terminal");
+  });
+});
+
+describe("Durable-layer seeding", () => {
+  let repoDir: string;
+
+  beforeEach(async () => {
+    repoDir = await mkdtemp(join(tmpdir(), "iaep-repo-"));
+  });
+
+  afterEach(async () => {
+    await rm(repoDir, { recursive: true, force: true });
+  });
+
+  test("stage receives durable:context containing CONTEXT.md content", async () => {
+    await writeFile(join(repoDir, "CONTEXT.md"), "# Project context");
+
+    const runtime = new CapturingSequencedRuntime({
+      diagnose: [{ type: "text", content: "done" }],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }],
+      runtime,
+      repoPath: repoDir,
+    });
+
+    expect(runtime.inputsFor("diagnose")[0].artifacts["durable:context"]).toBe(
+      "# Project context"
+    );
+  });
+
+  test("stage receives durable:context-map containing CONTEXT-MAP.md content when present", async () => {
+    await writeFile(join(repoDir, "CONTEXT.md"), "# Project context");
+    await writeFile(join(repoDir, "CONTEXT-MAP.md"), "# Context map");
+
+    const runtime = new CapturingSequencedRuntime({
+      diagnose: [{ type: "text", content: "done" }],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }],
+      runtime,
+      repoPath: repoDir,
+    });
+
+    expect(
+      runtime.inputsFor("diagnose")[0].artifacts["durable:context-map"]
+    ).toBe("# Context map");
+  });
+
+  test("run reaches terminal when CONTEXT-MAP.md is absent", async () => {
+    await writeFile(join(repoDir, "CONTEXT.md"), "# Project context");
+    // no CONTEXT-MAP.md
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }],
+      repoPath: repoDir,
+    });
+
+    expect(state.status).toBe("terminal");
+  });
+
+  test("stage does not receive durable:context when repoPath is not provided", async () => {
+    const runtime = new CapturingSequencedRuntime({
+      diagnose: [{ type: "text", content: "done" }],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }],
+      runtime,
+    });
+
+    expect(
+      runtime.inputsFor("diagnose")[0].artifacts["durable:context"]
+    ).toBeUndefined();
   });
 });

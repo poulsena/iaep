@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   applyEdits,
   commitEdits,
@@ -46,6 +48,10 @@ export class WorkflowEngine {
     saveArtifact: (stageId: string, content: string) => Promise<void>;
   }): Promise<RunState> {
     let artifacts: Record<string, string> = options.initialArtifacts ?? {};
+    if (options.repoPath) {
+      const durable = await readDurableContext(options.repoPath);
+      artifacts = { ...durable, ...artifacts };
+    }
     const gatesPassed: string[] = options.initialGatesPassed ?? [];
     let rejectionCount = options.initialRejectionCount ?? 0;
     let workerStageIndex = -1;
@@ -274,4 +280,27 @@ export class WorkflowEngine {
       await commitEdits(repoPath, stage.name);
     }
   }
+}
+
+async function readDurableContext(
+  repoPath: string
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  try {
+    result["durable:context"] = await readFile(
+      join(repoPath, "CONTEXT.md"),
+      "utf-8"
+    );
+  } catch {
+    // no CONTEXT.md — skip
+  }
+  try {
+    result["durable:context-map"] = await readFile(
+      join(repoPath, "CONTEXT-MAP.md"),
+      "utf-8"
+    );
+  } catch {
+    // no CONTEXT-MAP.md — skip
+  }
+  return result;
 }
