@@ -81,10 +81,15 @@ export class HeadlessDriver {
       repoPath: options.repoPath,
       branchType: options.branchType,
       maxRetries: options.maxRetries,
+      mergeGate: options.mergeGate,
       saveArtifact: (stageId, content) =>
         this.store.saveArtifact(options.repoKey, runId, stageId, content),
     });
-    await this.store.save(options.repoKey, runId, state);
+    if (state.status === "merged") {
+      await this.store.clearRun(options.repoKey, runId);
+    } else {
+      await this.store.save(options.repoKey, runId, state);
+    }
     return state;
   }
 
@@ -94,6 +99,9 @@ export class HeadlessDriver {
     stages: StageDefinition[];
     runtime?: AgentRuntime;
     reviewerRuntime?: AgentRuntime;
+    mergeGate?: (runId: string) => Promise<"approve" | "deny">;
+    repoPath?: string;
+    branchType?: import("./types").BranchType;
     decision: "approved" | "denied";
   }): Promise<RunState> {
     const parked = await this.store.load(options.repoKey, options.runId);
@@ -108,11 +116,8 @@ export class HeadlessDriver {
     const escalationIndex = options.stages.findIndex(
       (s) => s.name === parked.currentStage
     );
-    const startIndex = escalationIndex >= 0 ? escalationIndex + 1 : 0;
-    const initialGatesPassed = [
-      ...parked.gatesPassed,
-      ...(escalationIndex >= 0 ? [parked.currentStage] : []),
-    ];
+    const startIndex = escalationIndex >= 0 ? escalationIndex : 0;
+    const initialGatesPassed = [...parked.gatesPassed];
 
     const artifacts = await this.store.loadAllArtifacts(
       options.repoKey,
@@ -126,6 +131,13 @@ export class HeadlessDriver {
       stages: options.stages,
       runtime,
       reviewerRuntime: options.reviewerRuntime,
+      mergeGate: options.mergeGate,
+      repoPath: options.repoPath,
+      branchType:
+        options.branchType ??
+        (parked.featureBranch?.split("/")[0] as
+          | import("./types").BranchType
+          | undefined),
       startIndex,
       initialArtifacts: artifacts,
       initialGatesPassed,
@@ -138,7 +150,11 @@ export class HeadlessDriver {
           content
         ),
     });
-    await this.store.save(options.repoKey, options.runId, state);
+    if (state.status === "merged") {
+      await this.store.clearRun(options.repoKey, options.runId);
+    } else {
+      await this.store.save(options.repoKey, options.runId, state);
+    }
     return state;
   }
 }

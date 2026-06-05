@@ -344,8 +344,11 @@ describe("Human-escalation resumability", () => {
     const workerRuntime = new FakeAgentRuntime({
       implementation: { type: "text", content: "implemented" },
     });
-    const reviewerRuntime = new FakeAgentRuntime({
+    const rejectingReviewer = new FakeAgentRuntime({
       review: { type: "review-rejected", content: "not good enough" },
+    });
+    const passingReviewer = new FakeAgentRuntime({
+      review: { type: "review-passed", content: "LGTM" },
     });
 
     const parkedState = await driver.startRun({
@@ -353,7 +356,7 @@ describe("Human-escalation resumability", () => {
       lane: "quick-change",
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: rejectingReviewer,
       maxRetries: 0,
     });
 
@@ -366,7 +369,7 @@ describe("Human-escalation resumability", () => {
       runId: parkedState.runId,
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: passingReviewer,
       decision: "approved",
     });
 
@@ -408,8 +411,11 @@ describe("Human-escalation resumability", () => {
     const workerRuntime = new FakeAgentRuntime({
       implementation: { type: "text", content: "implemented" },
     });
-    const reviewerRuntime = new FakeAgentRuntime({
+    const rejectingReviewer = new FakeAgentRuntime({
       review: { type: "review-rejected", content: "not good enough" },
+    });
+    const passingReviewer = new FakeAgentRuntime({
+      review: { type: "review-passed", content: "LGTM" },
     });
 
     const parkedState = await driver.startRun({
@@ -417,7 +423,7 @@ describe("Human-escalation resumability", () => {
       lane: "quick-change",
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: rejectingReviewer,
       maxRetries: 0,
     });
 
@@ -427,18 +433,18 @@ describe("Human-escalation resumability", () => {
       runId: parkedState.runId,
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: passingReviewer,
       decision: "approved",
     });
 
     expect(resumedState.gatesPassed).toContain("review");
   });
 
-  test("resumed run state is persisted to disk", async () => {
+  test("resume re-runs the blocked stage: rejecting reviewer on resume re-blocks the run", async () => {
     const workerRuntime = new FakeAgentRuntime({
       implementation: { type: "text", content: "implemented" },
     });
-    const reviewerRuntime = new FakeAgentRuntime({
+    const rejectingReviewer = new FakeAgentRuntime({
       review: { type: "review-rejected", content: "not good enough" },
     });
 
@@ -447,7 +453,40 @@ describe("Human-escalation resumability", () => {
       lane: "quick-change",
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: rejectingReviewer,
+      maxRetries: 0,
+    });
+
+    const freshDriver = new HeadlessDriver({ baseDir });
+    const resumedState = await freshDriver.resumeRun({
+      repoKey: TEST_REPO_KEY,
+      runId: parkedState.runId,
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime: rejectingReviewer,
+      decision: "approved",
+    });
+
+    expect(resumedState.status).toBe("blocked");
+  });
+
+  test("resumed run state is persisted to disk", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const rejectingReviewer = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "not good enough" },
+    });
+    const passingReviewer = new FakeAgentRuntime({
+      review: { type: "review-passed", content: "LGTM" },
+    });
+
+    const parkedState = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages,
+      runtime: workerRuntime,
+      reviewerRuntime: rejectingReviewer,
       maxRetries: 0,
     });
 
@@ -457,7 +496,7 @@ describe("Human-escalation resumability", () => {
       runId: parkedState.runId,
       stages,
       runtime: workerRuntime,
-      reviewerRuntime,
+      reviewerRuntime: passingReviewer,
       decision: "approved",
     });
 
