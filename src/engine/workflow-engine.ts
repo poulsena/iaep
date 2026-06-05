@@ -65,6 +65,16 @@ export class WorkflowEngine {
         artifacts,
       });
 
+      if (action.type === "blocked") {
+        return {
+          runId: options.runId,
+          lane: options.lane,
+          currentStage: stage.name,
+          gatesPassed,
+          status: "blocked",
+        };
+      }
+
       if (stage.role === "worker" && action.type === "edit" && action.edits?.length && options.repoPath) {
         await applyEdits(options.repoPath, action.edits);
         await commitEdits(options.repoPath, stage.name);

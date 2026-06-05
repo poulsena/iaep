@@ -37,6 +37,7 @@ export interface FileEdit {
 export interface AgentAction {
   type: string;
   content: string;
+  tool?: string;
   edits?: FileEdit[];
 }
 
@@ -50,6 +51,10 @@ export interface AgentRuntime {
   execute(input: StageInput): Promise<AgentAction>;
 }
 
+export interface ReachControlOptions {
+  allowedTools: string[];
+}
+
 export interface StartRunOptions {
   repoKey: string;
   repoPath?: string;
@@ -59,4 +64,5 @@ export interface StartRunOptions {
   runtime?: AgentRuntime;
   reviewerRuntime?: AgentRuntime;
   adapter?: ExecutionAdapter;
+  reachControl?: ReachControlOptions;
 }
