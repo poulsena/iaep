@@ -2,13 +2,13 @@ export type Lane = "quick-change" | "full-feature";
 export type BranchType = "feature" | "fix" | "chore" | "refactor" | "docs";
 
 export interface BuildResult {
-  success: boolean;
   output: string;
+  success: boolean;
 }
 
 export interface TestResult {
-  success: boolean;
   output: string;
+  success: boolean;
 }
 
 export interface ExecutionAdapter {
@@ -22,47 +22,60 @@ export interface StageDefinition {
 }
 
 export interface RunState {
-  runId: string;
-  lane: Lane;
   currentStage: string;
   gatesPassed: string[];
+  lane: Lane;
+  runId: string;
   status: "running" | "terminal" | "blocked";
 }
 
 export interface FileEdit {
-  path: string;
   content: string;
+  path: string;
 }
 
 export interface AgentAction {
-  type: string;
   content: string;
-  tool?: string;
   edits?: FileEdit[];
+  tool?: string;
+  type: string;
 }
 
 export interface StageInput {
-  stageId: string;
-  runId: string;
   artifacts: Record<string, string>;
+  runId: string;
+  stageId: string;
 }
 
 export interface AgentRuntime {
   execute(input: StageInput): Promise<AgentAction>;
 }
 
+export interface AuditEntry {
+  decision: "allowed" | "approved" | "denied" | "blocked";
+  runId: string;
+  stageId: string;
+  timestamp: string;
+  tool?: string;
+}
+
 export interface ReachControlOptions {
   allowedTools: string[];
+  gatedTools?: string[];
 }
 
 export interface StartRunOptions {
-  repoKey: string;
-  repoPath?: string;
+  adapter?: ExecutionAdapter;
+  approver?: (
+    stageId: string,
+    action: AgentAction
+  ) => Promise<"approve" | "deny">;
   branchType?: BranchType;
   lane: Lane;
-  stages: StageDefinition[];
-  runtime?: AgentRuntime;
-  reviewerRuntime?: AgentRuntime;
-  adapter?: ExecutionAdapter;
   reachControl?: ReachControlOptions;
+  repoKey: string;
+  repoPath?: string;
+  reviewerRuntime?: AgentRuntime;
+  runtime?: AgentRuntime;
+  stages: StageDefinition[];
 }

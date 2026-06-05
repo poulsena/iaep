@@ -1,13 +1,13 @@
-import type { ExecutionAdapter, TestResult, BuildResult } from "./types";
+import type { BuildResult, ExecutionAdapter, TestResult } from "./types";
 
 export class FakeExecutionAdapter implements ExecutionAdapter {
   constructor(private readonly testResult: TestResult) {}
 
-  async build(): Promise<BuildResult> {
-    return { success: true, output: "" };
+  build(): Promise<BuildResult> {
+    return Promise.resolve({ success: true, output: "" });
   }
 
-  async test(): Promise<TestResult> {
-    return this.testResult;
+  test(): Promise<TestResult> {
+    return Promise.resolve(this.testResult);
   }
 }

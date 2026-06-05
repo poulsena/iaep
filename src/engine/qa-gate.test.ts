@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { HeadlessDriver } from "./headless-driver";
-import { FakeExecutionAdapter } from "./fake-execution-adapter";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { FakeAgentRuntime } from "./fake-agent-runtime";
+import { FakeExecutionAdapter } from "./fake-execution-adapter";
+import { HeadlessDriver } from "./headless-driver";
 
 const TEST_REPO_KEY = "test/repo";
 
@@ -22,7 +22,10 @@ afterEach(async () => {
 
 describe("QA gate", () => {
   test("green tests: run reaches terminal and QA stage is in gatesPassed", async () => {
-    const adapter = new FakeExecutionAdapter({ success: true, output: "all tests passed" });
+    const adapter = new FakeExecutionAdapter({
+      success: true,
+      output: "all tests passed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",
@@ -34,7 +37,10 @@ describe("QA gate", () => {
   });
 
   test("red tests: run is blocked and currentStage stays at the QA stage", async () => {
-    const adapter = new FakeExecutionAdapter({ success: false, output: "2 tests failed" });
+    const adapter = new FakeExecutionAdapter({
+      success: false,
+      output: "2 tests failed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",
@@ -46,7 +52,10 @@ describe("QA gate", () => {
   });
 
   test("red tests: QA stage is not in gatesPassed", async () => {
-    const adapter = new FakeExecutionAdapter({ success: false, output: "2 tests failed" });
+    const adapter = new FakeExecutionAdapter({
+      success: false,
+      output: "2 tests failed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",
@@ -69,8 +78,13 @@ describe("QA gate", () => {
 
 describe("QA gate with reviewer", () => {
   test("review-failed blocks run even when tests are green", async () => {
-    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-failed", content: "code smell" } });
-    const adapter = new FakeExecutionAdapter({ success: true, output: "all passed" });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-failed", content: "code smell" },
+    });
+    const adapter = new FakeExecutionAdapter({
+      success: true,
+      output: "all passed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",
@@ -86,8 +100,13 @@ describe("QA gate with reviewer", () => {
   });
 
   test("review-passed and green tests: run reaches terminal with both in gatesPassed", async () => {
-    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-passed", content: "LGTM" } });
-    const adapter = new FakeExecutionAdapter({ success: true, output: "all passed" });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-passed", content: "LGTM" },
+    });
+    const adapter = new FakeExecutionAdapter({
+      success: true,
+      output: "all passed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",
@@ -104,8 +123,13 @@ describe("QA gate with reviewer", () => {
   });
 
   test("review-passed but red tests: blocked at qa, review still in gatesPassed", async () => {
-    const reviewerRuntime = new FakeAgentRuntime({ review: { type: "review-passed", content: "LGTM" } });
-    const adapter = new FakeExecutionAdapter({ success: false, output: "2 tests failed" });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-passed", content: "LGTM" },
+    });
+    const adapter = new FakeExecutionAdapter({
+      success: false,
+      output: "2 tests failed",
+    });
     const state = await driver.startRun({
       repoKey: TEST_REPO_KEY,
       lane: "quick-change",

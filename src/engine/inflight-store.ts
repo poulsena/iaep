@@ -1,5 +1,5 @@
-import { join } from "path";
-import { mkdir, writeFile, readFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { RunState } from "./types";
 
 export class InFlightStore {
@@ -21,14 +21,30 @@ export class InFlightStore {
     }
   }
 
-  async saveArtifact(repoKey: string, runId: string, stageId: string, content: string): Promise<void> {
+  async saveArtifact(
+    repoKey: string,
+    runId: string,
+    stageId: string,
+    content: string
+  ): Promise<void> {
     const dir = join(this.baseDir, repoKey, "runs", runId, "artifacts");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, `${stageId}.md`), content);
   }
 
-  async loadArtifact(repoKey: string, runId: string, stageId: string): Promise<string | null> {
-    const path = join(this.baseDir, repoKey, "runs", runId, "artifacts", `${stageId}.md`);
+  async loadArtifact(
+    repoKey: string,
+    runId: string,
+    stageId: string
+  ): Promise<string | null> {
+    const path = join(
+      this.baseDir,
+      repoKey,
+      "runs",
+      runId,
+      "artifacts",
+      `${stageId}.md`
+    );
     try {
       return await readFile(path, "utf-8");
     } catch {

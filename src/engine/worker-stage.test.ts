@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { FakeAgentRuntime } from "./fake-agent-runtime";
 import { HeadlessDriver } from "./headless-driver";
 import { InFlightStore } from "./inflight-store";
-import { FakeAgentRuntime } from "./fake-agent-runtime";
 
 const exec = promisify(execFile);
 
@@ -59,7 +59,12 @@ describe("Worker stage", () => {
       stages: [{ name: "implementation", role: "worker" }],
       runtime,
     });
-    const branches = await git(repoDir, "branch", "--list", `feature/${state.runId}`);
+    const branches = await git(
+      repoDir,
+      "branch",
+      "--list",
+      `feature/${state.runId}`
+    );
     expect(branches).not.toBe("");
   });
 
@@ -89,7 +94,11 @@ describe("Worker stage", () => {
       runtime,
     });
     const store = new InFlightStore(baseDir);
-    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "implementation");
+    const artifact = await store.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "implementation"
+    );
     expect(artifact).toBe(SCRIPTED_EDIT.content);
   });
 
@@ -103,7 +112,11 @@ describe("Worker stage", () => {
       stages: [{ name: "implementation", role: "worker" }],
       runtime,
     });
-    const fileOnBranch = await git(repoDir, "show", `feature/${state.runId}:src/foo.ts`);
+    const fileOnBranch = await git(
+      repoDir,
+      "show",
+      `feature/${state.runId}:src/foo.ts`
+    );
     expect(fileOnBranch).toBe(SCRIPTED_EDIT.edits[0].content);
   });
 });

@@ -1,5 +1,17 @@
-import type { StageDefinition, RunState, Lane, AgentRuntime, BranchType, ExecutionAdapter } from "./types";
-import { createFeatureBranch, applyEdits, commitEdits, getDiff } from "./git-ops";
+import {
+  applyEdits,
+  commitEdits,
+  createFeatureBranch,
+  getDiff,
+} from "./git-ops";
+import type {
+  AgentRuntime,
+  BranchType,
+  ExecutionAdapter,
+  Lane,
+  RunState,
+  StageDefinition,
+} from "./types";
 
 export class WorkflowEngine {
   async run(options: {
@@ -16,17 +28,21 @@ export class WorkflowEngine {
     const artifacts: Record<string, string> = {};
     const gatesPassed: string[] = [];
 
-    if (options.repoPath && options.stages.some(s => s.role === "worker")) {
-      await createFeatureBranch(options.repoPath, options.branchType ?? "feature", options.runId);
+    if (options.repoPath && options.stages.some((s) => s.role === "worker")) {
+      await createFeatureBranch(
+        options.repoPath,
+        options.branchType ?? "feature",
+        options.runId
+      );
     }
 
     for (const stage of options.stages) {
       if (stage.role === "reviewer") {
         const reviewerArtifacts = { ...artifacts };
         if (options.repoPath) {
-          reviewerArtifacts["diff"] = await getDiff(options.repoPath);
+          reviewerArtifacts.diff = await getDiff(options.repoPath);
         }
-        const action = await options.reviewerRuntime!.execute({
+        const action = await options.reviewerRuntime?.execute({
           stageId: stage.name,
           runId: options.runId,
           artifacts: reviewerArtifacts,
@@ -45,7 +61,7 @@ export class WorkflowEngine {
       }
 
       if (stage.role === "qa") {
-        const result = await options.adapter!.test();
+        const result = await options.adapter?.test();
         if (!result.success) {
           return {
             runId: options.runId,
@@ -75,7 +91,12 @@ export class WorkflowEngine {
         };
       }
 
-      if (stage.role === "worker" && action.type === "edit" && action.edits?.length && options.repoPath) {
+      if (
+        stage.role === "worker" &&
+        action.type === "edit" &&
+        action.edits?.length &&
+        options.repoPath
+      ) {
         await applyEdits(options.repoPath, action.edits);
         await commitEdits(options.repoPath, stage.name);
       }

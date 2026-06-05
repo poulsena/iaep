@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, access } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { writeFile } from "fs";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { HeadlessDriver } from "./headless-driver";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
+import { writeFile } from "node:fs";
+import { access, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { FakeAgentRuntime } from "./fake-agent-runtime";
+import { HeadlessDriver } from "./headless-driver";
 import type { AgentAction, StageInput } from "./types";
 
 const execP = promisify(execFile);
@@ -27,7 +27,7 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
 class CapturingFakeRuntime extends FakeAgentRuntime {
   lastInput?: StageInput;
 
-  async execute(input: StageInput): Promise<AgentAction> {
+  execute(input: StageInput): Promise<AgentAction> {
     this.lastInput = input;
     return super.execute(input);
   }
@@ -45,7 +45,9 @@ beforeEach(async () => {
   await git(repoDir, "config", "user.email", "test@test.com");
   await git(repoDir, "config", "user.name", "Test");
   await new Promise<void>((resolve, reject) =>
-    writeFile(join(repoDir, "README.md"), "initial", err => (err ? reject(err) : resolve()))
+    writeFile(join(repoDir, "README.md"), "initial", (err) =>
+      err ? reject(err) : resolve()
+    )
   );
   await git(repoDir, "add", ".");
   await git(repoDir, "commit", "-m", "initial commit");
@@ -62,8 +64,12 @@ afterEach(async () => {
 
 describe("Reviewer stage", () => {
   test("reviewer receives diff as artifact context after worker commits", async () => {
-    const reviewerRuntime = new CapturingFakeRuntime({ review: { type: "review-passed", content: "LGTM" } });
-    const workerRuntime = new FakeAgentRuntime({ implementation: SCRIPTED_EDIT });
+    const reviewerRuntime = new CapturingFakeRuntime({
+      review: { type: "review-passed", content: "LGTM" },
+    });
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: SCRIPTED_EDIT,
+    });
 
     await driver.startRun({
       repoKey: TEST_REPO_KEY,
@@ -78,7 +84,7 @@ describe("Reviewer stage", () => {
       reviewerRuntime,
     });
 
-    expect(reviewerRuntime.lastInput?.artifacts["diff"]).toContain("foo.ts");
+    expect(reviewerRuntime.lastInput?.artifacts.diff).toContain("foo.ts");
   });
 
   test("reviewer cannot mutate repository files even if it returns edits", async () => {
@@ -98,6 +104,8 @@ describe("Reviewer stage", () => {
       reviewerRuntime: reviewerWithEdits,
     });
 
-    await expect(access(join(repoDir, "injected-by-reviewer.ts"))).rejects.toThrow();
+    await expect(
+      access(join(repoDir, "injected-by-reviewer.ts"))
+    ).rejects.toThrow();
   });
 });

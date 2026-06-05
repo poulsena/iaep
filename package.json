@@ -6,11 +6,17 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "start": "electron ."
+    "start": "electron .",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "@biomejs/biome": "^2.4.16",
+    "@types/bun": "^1.2.16",
     "electron": "^36.3.1",
-    "@types/bun": "^1.2.16"
+    "husky": "^9.1.7",
+    "typescript": "^5.8.3",
+    "ultracite": "latest"
   }
 }

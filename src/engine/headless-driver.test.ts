@@ -1,11 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readFile } from "fs/promises";
-import { existsSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { FakeAgentRuntime } from "./fake-agent-runtime";
 import { HeadlessDriver } from "./headless-driver";
 import { InFlightStore } from "./inflight-store";
-import { FakeAgentRuntime } from "./fake-agent-runtime";
 
 const TEST_REPO_KEY = "test/repo";
 const QUICK_CHANGE_NOOP = {
@@ -36,13 +36,22 @@ describe("HeadlessDriver", () => {
 
   test("run.json is written to <baseDir>/<repoKey>/runs/<runId>/run.json", async () => {
     const state = await driver.startRun(QUICK_CHANGE_NOOP);
-    const expectedPath = join(baseDir, TEST_REPO_KEY, "runs", state.runId, "run.json");
+    const expectedPath = join(
+      baseDir,
+      TEST_REPO_KEY,
+      "runs",
+      state.runId,
+      "run.json"
+    );
     expect(existsSync(expectedPath)).toBe(true);
   });
 
   test("run.json contains runId, lane, currentStage, gatesPassed, and status", async () => {
     const state = await driver.startRun(QUICK_CHANGE_NOOP);
-    const raw = await readFile(join(baseDir, TEST_REPO_KEY, "runs", state.runId, "run.json"), "utf-8");
+    const raw = await readFile(
+      join(baseDir, TEST_REPO_KEY, "runs", state.runId, "run.json"),
+      "utf-8"
+    );
     const persisted = JSON.parse(raw);
     expect(persisted.runId).toBe(state.runId);
     expect(persisted.lane).toBe("quick-change");
@@ -67,7 +76,11 @@ describe("HeadlessDriver", () => {
     });
     const state = await driver.startRun({ ...QUICK_CHANGE_NOOP, runtime });
     const store = new InFlightStore(baseDir);
-    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "no-op");
+    const artifact = await store.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "no-op"
+    );
     expect(artifact).toBe("hello from no-op");
   });
 
@@ -85,8 +98,16 @@ describe("HeadlessDriver", () => {
     const state = await driver.startRun(twoStageRun);
 
     const freshStore = new InFlightStore(baseDir);
-    const diagnoseArtifact = await freshStore.loadArtifact(TEST_REPO_KEY, state.runId, "diagnose");
-    const fixArtifact = await freshStore.loadArtifact(TEST_REPO_KEY, state.runId, "fix");
+    const diagnoseArtifact = await freshStore.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "diagnose"
+    );
+    const fixArtifact = await freshStore.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "fix"
+    );
     expect(diagnoseArtifact).toBe("found the bug");
     expect(fixArtifact).toBe("applied the fix");
   });
@@ -95,14 +116,24 @@ describe("HeadlessDriver", () => {
     const runtime = new FakeAgentRuntime({});
     const state = await driver.startRun({ ...QUICK_CHANGE_NOOP, runtime });
     const store = new InFlightStore(baseDir);
-    const artifact = await store.loadArtifact(TEST_REPO_KEY, state.runId, "no-op");
+    const artifact = await store.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "no-op"
+    );
     expect(artifact).toBeNull();
   });
 
   test("in-flight store writes outside the repository directory", async () => {
     const repoDir = process.cwd();
     const state = await driver.startRun(QUICK_CHANGE_NOOP);
-    const runJsonPath = join(baseDir, TEST_REPO_KEY, "runs", state.runId, "run.json");
+    const runJsonPath = join(
+      baseDir,
+      TEST_REPO_KEY,
+      "runs",
+      state.runId,
+      "run.json"
+    );
     expect(runJsonPath.startsWith(repoDir)).toBe(false);
   });
 });
