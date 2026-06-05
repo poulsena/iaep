@@ -1,0 +1,5 @@
+git fetch origin main --quiet 2>/dev/null
+if ! git merge-base --is-ancestor origin/main HEAD; then
+  echo "Branch is not based on origin/main — rebase first: git rebase origin/main" >&2
+  exit 1
+fi
