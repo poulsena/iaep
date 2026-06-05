@@ -3,7 +3,11 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FakeAgentRuntime } from "./fake-agent-runtime";
+import {
+  CapturingSequencedRuntime,
+  FakeAgentRuntime,
+  SequencedFakeAgentRuntime,
+} from "./fake-agent-runtime";
 import { HeadlessDriver } from "./headless-driver";
 import { InFlightStore } from "./inflight-store";
 
@@ -135,5 +139,149 @@ describe("HeadlessDriver", () => {
       "run.json"
     );
     expect(runJsonPath.startsWith(repoDir)).toBe(false);
+  });
+});
+
+describe("Rejection loop-back", () => {
+  test("reviewer rejects then passes: run reaches terminal", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new SequencedFakeAgentRuntime({
+      review: [
+        { type: "review-rejected", content: "needs better error handling" },
+        { type: "review-passed", content: "LGTM" },
+      ],
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: workerRuntime,
+      reviewerRuntime,
+    });
+
+    expect(state.status).toBe("terminal");
+    expect(state.currentStage).toBe("terminal");
+  });
+
+  test("rejection artifact is written to the in-flight store with the reviewer's feedback", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new SequencedFakeAgentRuntime({
+      review: [
+        { type: "review-rejected", content: "needs better error handling" },
+        { type: "review-passed", content: "LGTM" },
+      ],
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: workerRuntime,
+      reviewerRuntime,
+    });
+
+    const store = new InFlightStore(baseDir);
+    const rejectionArtifact = await store.loadArtifact(
+      TEST_REPO_KEY,
+      state.runId,
+      "review-rejection"
+    );
+    expect(rejectionArtifact).toBe("needs better error handling");
+  });
+
+  test("retry implementation is seeded by the rejection artifact", async () => {
+    const capturingWorker = new CapturingSequencedRuntime({
+      implementation: [
+        { type: "text", content: "first attempt" },
+        { type: "text", content: "second attempt" },
+      ],
+    });
+    const reviewerRuntime = new SequencedFakeAgentRuntime({
+      review: [
+        { type: "review-rejected", content: "needs better error handling" },
+        { type: "review-passed", content: "LGTM" },
+      ],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: capturingWorker,
+      reviewerRuntime,
+    });
+
+    expect(
+      capturingWorker.inputsFor("implementation")[1].artifacts[
+        "review-rejection"
+      ]
+    ).toBe("needs better error handling");
+  });
+
+  test("retry implementation does not receive the previous implementation's artifact", async () => {
+    const capturingWorker = new CapturingSequencedRuntime({
+      implementation: [
+        { type: "text", content: "first attempt" },
+        { type: "text", content: "second attempt" },
+      ],
+    });
+    const reviewerRuntime = new SequencedFakeAgentRuntime({
+      review: [
+        { type: "review-rejected", content: "needs better error handling" },
+        { type: "review-passed", content: "LGTM" },
+      ],
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: capturingWorker,
+      reviewerRuntime,
+    });
+
+    expect(
+      capturingWorker.inputsFor("implementation")[1].artifacts.implementation
+    ).toBeUndefined();
+  });
+
+  test("second rejection blocks the run", async () => {
+    const workerRuntime = new FakeAgentRuntime({
+      implementation: { type: "text", content: "implemented" },
+    });
+    const reviewerRuntime = new FakeAgentRuntime({
+      review: { type: "review-rejected", content: "still not good enough" },
+    });
+
+    const state = await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [
+        { name: "implementation", role: "worker" },
+        { name: "review", role: "reviewer" },
+      ],
+      runtime: workerRuntime,
+      reviewerRuntime,
+    });
+
+    expect(state.status).toBe("blocked");
+    expect(state.rejectionCount).toBe(2);
   });
 });
