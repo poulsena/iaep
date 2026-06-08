@@ -1,0 +1,60 @@
+:root,
+:root[data-theme="light"] {
+  --bg: #f5f4f0;
+  --fg: #1a1a1a;
+  --fg-muted: #888880;
+  --fg-dim: #c0bfba;
+  --accent: #e05c00;
+  --warn: #b89000;
+  --success: #2d7a3a;
+  --danger: #c0392b;
+  --border: #c0bfba;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f0f0e;
+  --fg: #e2e0da;
+  --fg-muted: #888880;
+  --fg-dim: #3a3936;
+  --accent: #e05c00;
+  --warn: #c9a800;
+  --success: #3da64d;
+  --danger: #d44032;
+  --border: #2a2928;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0f0f0e;
+    --fg: #e2e0da;
+    --fg-muted: #888880;
+    --fg-dim: #3a3936;
+    --accent: #e05c00;
+    --warn: #c9a800;
+    --success: #3da64d;
+    --danger: #d44032;
+    --border: #2a2928;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family:
+    "IBM Plex Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
+    ui-monospace, monospace;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  color: var(--fg);
+  color-scheme: inherit;
+  background: var(--bg);
+}
