@@ -1,5 +1,9 @@
 import type { HeadlessDriver } from "../engine/headless-driver";
-import type { ProgressEvent, StartRunOptions } from "../engine/types";
+import type {
+  AgentRuntime,
+  ProgressEvent,
+  StartRunOptions,
+} from "../engine/types";
 
 type DriverLike = Pick<HeadlessDriver, "startRun" | "resumeRun">;
 
@@ -33,7 +37,10 @@ export class IpcDriverBridge {
   constructor(
     private readonly driver: DriverLike,
     private readonly ipc: IpcMainLike,
-    private readonly webContents: WebContentsLike
+    private readonly webContents: WebContentsLike,
+    private readonly runtime?: AgentRuntime,
+    private readonly reviewerRuntime?: AgentRuntime,
+    private readonly workerRuntime?: AgentRuntime
   ) {
     this.register();
   }
@@ -43,6 +50,9 @@ export class IpcDriverBridge {
       const payload = data as StartRunPayload;
       const state = await this.driver.startRun({
         ...payload,
+        runtime: this.runtime,
+        reviewerRuntime: this.reviewerRuntime,
+        workerRuntime: this.workerRuntime,
         onProgress: (e: ProgressEvent) =>
           this.webContents.send("iaep:run-progress", e),
         mergeGate: () => this.awaitGateDecision("merge"),

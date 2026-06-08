@@ -82,6 +82,16 @@ const SIMPLE_RUN = {
 
 // ── Phase 2 tests ──────────────────────────────────────────────────────────
 
+import type { AgentRuntime, StageInput } from "../engine/types";
+
+class FakeAgentRuntime implements AgentRuntime {
+  calls: StageInput[] = [];
+  execute(input: StageInput) {
+    this.calls.push(input);
+    return Promise.resolve({ type: "completed", content: "done" });
+  }
+}
+
 describe("IpcDriverBridge", () => {
   test("iaep:start-run sends stage-started event to webContents", async () => {
     const wc = new FakeWebContents();
@@ -175,6 +185,24 @@ describe("IpcDriverBridge", () => {
       | { type: "run-completed"; state: RunState }
       | undefined;
     expect(completed?.state.status).toBe("terminal");
+  });
+
+  test("configured runtime is forwarded to driver.startRun", async () => {
+    const wc = new FakeWebContents();
+    const ipc = new FakeIpcMain();
+    let capturedRuntime: unknown;
+    const driver = makeDriver((options) => {
+      capturedRuntime = options.runtime;
+      return Promise.resolve(mockState("terminal"));
+    });
+    const runtime = new FakeAgentRuntime();
+
+    const { IpcDriverBridge } = await import("./ipc-driver-bridge");
+    new IpcDriverBridge(driver, ipc, wc, runtime);
+
+    await ipc.invoke("iaep:start-run", SIMPLE_RUN);
+
+    expect(capturedRuntime).toBe(runtime);
   });
 
   test("denied gate-decision results in blocked run-completed event", async () => {

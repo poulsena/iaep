@@ -9,9 +9,9 @@ const exec = promisify(execFile);
 export async function createFeatureBranch(
   repoPath: string,
   branchType: BranchType,
-  runId: string
+  slug: string
 ): Promise<void> {
-  await exec("git", ["checkout", "-b", `${branchType}/${runId}`], {
+  await exec("git", ["checkout", "-b", `${branchType}/${slug}`], {
     cwd: repoPath,
   });
 }
@@ -45,6 +45,15 @@ export async function mergeToMain(
     ["merge", "--no-ff", featureBranch, "-m", `Merge ${featureBranch}`],
     { cwd: repoPath }
   );
+}
+
+export function branchSlug(text: string): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug || "untitled";
 }
 
 export async function getDiff(repoPath: string): Promise<string> {

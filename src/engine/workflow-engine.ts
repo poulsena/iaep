@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyEdits,
+  branchSlug,
   commitEdits,
   createFeatureBranch,
   getDiff,
@@ -51,6 +52,7 @@ interface RunOptions {
   saveArtifact: (stageId: string, content: string) => Promise<void>;
   stages: StageDefinition[];
   startIndex?: number;
+  workerRuntime?: AgentRuntime;
 }
 
 export class WorkflowEngine {
@@ -61,12 +63,13 @@ export class WorkflowEngine {
       artifacts = { ...durable, ...artifacts };
     }
     const branchType = options.branchType ?? "feature";
-    const featureBranch = `${branchType}/${options.runId}`;
+    const slug = options.brief ? branchSlug(options.brief.text) : options.runId;
+    const featureBranch = `${branchType}/${slug}`;
     const needsBranch = options.stages.some(
       (s) => s.role === "worker" || s.role === "librarian"
     );
     if (options.repoPath && needsBranch && !options.startIndex) {
-      await createFeatureBranch(options.repoPath, branchType, options.runId);
+      await createFeatureBranch(options.repoPath, branchType, slug);
     }
     const state = await this.executeStages(
       options,
@@ -106,40 +109,27 @@ export class WorkflowEngine {
       }
 
       if (stage.role === "reviewer") {
-        if (!options.reviewerRuntime) {
-          throw new Error("reviewer stage requires reviewerRuntime");
-        }
-        const outcome = await this.runReviewerStage(
+        const step = await this.dispatchReviewerStage(
           stage,
-          options.reviewerRuntime,
+          options,
           artifacts,
           preWorkerArtifacts,
           workerStageIndex,
           rejectionCount,
-          options.runId,
-          options.repoPath,
-          options.maxRetries ?? 2,
-          options.saveArtifact,
-          stagesBrief
-        );
-        const next = this.applyReviewOutcome(
-          outcome,
-          stage.name,
-          options,
           gatesPassed,
-          brief
+          brief,
+          stagesBrief,
+          emit
         );
-        if (next.type === "loopback") {
-          artifacts = next.artifacts;
-          rejectionCount = next.rejectionCount;
-          i = next.toIndex;
+        if (step.type === "loopback") {
+          artifacts = step.artifacts;
+          rejectionCount = step.rejectionCount;
+          i = step.toIndex;
           continue;
         }
-        if (next.type === "blocked") {
-          return next.state;
+        if (step.type === "blocked") {
+          return step.state;
         }
-        emit?.({ type: "stage-completed", stage: stage.name, content: "" });
-        gatesPassed.push(stage.name);
         i++;
         continue;
       }
@@ -177,9 +167,13 @@ export class WorkflowEngine {
         );
       }
 
+      const stageRuntime =
+        stage.role === "worker" && options.workerRuntime
+          ? options.workerRuntime
+          : options.runtime;
       const result = await this.runDefaultStage(
         stage,
-        options.runtime,
+        stageRuntime,
         options.runId,
         artifacts,
         options.repoPath,
@@ -263,6 +257,58 @@ export class WorkflowEngine {
       status: "merged",
       featureBranch,
     };
+  }
+
+  private async dispatchReviewerStage(
+    stage: StageDefinition,
+    options: RunOptions,
+    artifacts: Record<string, string>,
+    preWorkerArtifacts: Record<string, string>,
+    workerStageIndex: number,
+    rejectionCount: number,
+    gatesPassed: string[],
+    brief: Brief | undefined,
+    stagesBrief: Brief | undefined,
+    emit: RunOptions["onProgress"]
+  ): Promise<
+    | {
+        type: "loopback";
+        toIndex: number;
+        artifacts: Record<string, string>;
+        rejectionCount: number;
+      }
+    | { type: "blocked"; state: RunState }
+    | { type: "passed" }
+  > {
+    if (!options.reviewerRuntime) {
+      throw new Error("reviewer stage requires reviewerRuntime");
+    }
+    const outcome = await this.runReviewerStage(
+      stage,
+      options.reviewerRuntime,
+      artifacts,
+      preWorkerArtifacts,
+      workerStageIndex,
+      rejectionCount,
+      options.runId,
+      options.repoPath,
+      options.maxRetries ?? 2,
+      options.saveArtifact,
+      stagesBrief
+    );
+    const next = this.applyReviewOutcome(
+      outcome,
+      stage.name,
+      options,
+      gatesPassed,
+      brief
+    );
+    if (next.type !== "passed") {
+      return next;
+    }
+    emit?.({ type: "stage-completed", stage: stage.name, content: "" });
+    gatesPassed.push(stage.name);
+    return { type: "passed" };
   }
 
   private applyReviewOutcome(
