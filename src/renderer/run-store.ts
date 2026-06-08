@@ -38,7 +38,10 @@ export function createRunStore(ipc: IpcRendererLike) {
   });
 
   async function start(
-    options: Pick<StartRunOptions, "repoKey" | "lane" | "stages" | "repoPath">
+    options: Pick<
+      StartRunOptions,
+      "repoKey" | "lane" | "stages" | "repoPath" | "brief"
+    >
   ) {
     status.set("running");
     outputEntries.set([]);

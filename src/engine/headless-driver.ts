@@ -84,6 +84,7 @@ export class HeadlessDriver {
       runtime,
       reviewerRuntime,
       adapter,
+      brief: options.brief,
       repoPath: options.repoPath,
       branchType: options.branchType,
       maxRetries: options.maxRetries,
@@ -138,6 +139,7 @@ export class HeadlessDriver {
       stages: options.stages,
       runtime,
       reviewerRuntime: options.reviewerRuntime,
+      brief: parked.brief,
       mergeGate: options.mergeGate,
       repoPath: options.repoPath,
       branchType:

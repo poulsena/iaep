@@ -11,6 +11,7 @@ import type {
   AgentAction,
   AgentRuntime,
   BranchType,
+  Brief,
   ExecutionAdapter,
   Lane,
   ProgressEvent,
@@ -35,6 +36,7 @@ type DefaultStageOutcome =
 interface RunOptions {
   adapter?: ExecutionAdapter;
   branchType?: BranchType;
+  brief?: Brief;
   initialArtifacts?: Record<string, string>;
   initialGatesPassed?: string[];
   initialRejectionCount?: number;
@@ -66,7 +68,12 @@ export class WorkflowEngine {
     if (options.repoPath && needsBranch && !options.startIndex) {
       await createFeatureBranch(options.repoPath, branchType, options.runId);
     }
-    const state = await this.executeStages(options, artifacts, featureBranch);
+    const state = await this.executeStages(
+      options,
+      artifacts,
+      featureBranch,
+      options.brief
+    );
     options.onProgress?.({ type: "run-completed", state });
     return state;
   }
@@ -74,7 +81,8 @@ export class WorkflowEngine {
   private async executeStages(
     options: RunOptions,
     initialArtifacts: Record<string, string>,
-    featureBranch: string
+    featureBranch: string,
+    brief?: Brief
   ): Promise<RunState> {
     let artifacts = initialArtifacts;
     const gatesPassed: string[] = options.initialGatesPassed ?? [];
@@ -84,9 +92,11 @@ export class WorkflowEngine {
 
     const emit = options.onProgress;
 
-    let i = options.startIndex ?? 0;
+    const firstStageIndex = options.startIndex ?? 0;
+    let i = firstStageIndex;
     while (i < options.stages.length) {
       const stage = options.stages[i];
+      const stagesBrief = i === firstStageIndex ? brief : undefined;
 
       emit?.({ type: "stage-started", stage: stage.name });
 
@@ -109,23 +119,24 @@ export class WorkflowEngine {
           options.runId,
           options.repoPath,
           options.maxRetries ?? 2,
-          options.saveArtifact
+          options.saveArtifact,
+          stagesBrief
         );
-        if (outcome.type === "loopback") {
-          artifacts = outcome.artifacts;
-          rejectionCount = outcome.rejectionCount;
-          i = outcome.toIndex;
+        const next = this.applyReviewOutcome(
+          outcome,
+          stage.name,
+          options,
+          gatesPassed,
+          brief
+        );
+        if (next.type === "loopback") {
+          artifacts = next.artifacts;
+          rejectionCount = next.rejectionCount;
+          i = next.toIndex;
           continue;
         }
-        if (outcome.type === "blocked") {
-          return {
-            runId: options.runId,
-            lane: options.lane,
-            currentStage: stage.name,
-            gatesPassed,
-            rejectionCount: outcome.rejectionCount,
-            status: "blocked",
-          };
+        if (next.type === "blocked") {
+          return next.state;
         }
         emit?.({ type: "stage-completed", stage: stage.name, content: "" });
         gatesPassed.push(stage.name);
@@ -137,6 +148,7 @@ export class WorkflowEngine {
         const passed = await this.runQaStage(options.adapter);
         if (!passed) {
           return {
+            brief,
             runId: options.runId,
             lane: options.lane,
             currentStage: stage.name,
@@ -152,38 +164,17 @@ export class WorkflowEngine {
       }
 
       if (stage.role === "librarian") {
-        const approved = await this.runLibrarianStage(
+        return await this.executeLibrarianStep(
           stage,
-          options.runtime,
-          options.runId,
+          options,
           artifacts,
-          options.repoPath,
           featureBranch,
-          options.mergeGate,
-          options.saveArtifact
-        );
-        if (!approved) {
-          return {
-            runId: options.runId,
-            lane: options.lane,
-            currentStage: stage.name,
-            gatesPassed,
-            rejectionCount,
-            status: "blocked",
-            featureBranch,
-          };
-        }
-        emit?.({ type: "stage-completed", stage: stage.name, content: "" });
-        gatesPassed.push(stage.name);
-        return {
-          runId: options.runId,
-          lane: options.lane,
-          currentStage: "terminal",
           gatesPassed,
           rejectionCount,
-          status: "merged",
-          featureBranch,
-        };
+          stagesBrief,
+          brief,
+          emit
+        );
       }
 
       const result = await this.runDefaultStage(
@@ -192,10 +183,12 @@ export class WorkflowEngine {
         options.runId,
         artifacts,
         options.repoPath,
-        options.saveArtifact
+        options.saveArtifact,
+        stagesBrief
       );
       if (result.type === "blocked") {
         return {
+          brief,
           runId: options.runId,
           lane: options.lane,
           currentStage: stage.name,
@@ -214,6 +207,7 @@ export class WorkflowEngine {
     }
 
     return {
+      brief,
       runId: options.runId,
       lane: options.lane,
       currentStage: "terminal",
@@ -221,6 +215,89 @@ export class WorkflowEngine {
       rejectionCount,
       status: "terminal",
     };
+  }
+
+  private async executeLibrarianStep(
+    stage: StageDefinition,
+    options: RunOptions,
+    artifacts: Record<string, string>,
+    featureBranch: string,
+    gatesPassed: string[],
+    rejectionCount: number,
+    stagesBrief: Brief | undefined,
+    brief: Brief | undefined,
+    emit: RunOptions["onProgress"]
+  ): Promise<RunState> {
+    const approved = await this.runLibrarianStage(
+      stage,
+      options.runtime,
+      options.runId,
+      artifacts,
+      options.repoPath,
+      featureBranch,
+      options.mergeGate,
+      options.saveArtifact,
+      stagesBrief
+    );
+    if (!approved) {
+      return {
+        brief,
+        runId: options.runId,
+        lane: options.lane,
+        currentStage: stage.name,
+        gatesPassed,
+        rejectionCount,
+        status: "blocked",
+        featureBranch,
+      };
+    }
+    emit?.({ type: "stage-completed", stage: stage.name, content: "" });
+    gatesPassed.push(stage.name);
+    return {
+      brief,
+      runId: options.runId,
+      lane: options.lane,
+      currentStage: "terminal",
+      gatesPassed,
+      rejectionCount,
+      status: "merged",
+      featureBranch,
+    };
+  }
+
+  private applyReviewOutcome(
+    outcome: ReviewOutcome,
+    stageName: string,
+    options: RunOptions,
+    gatesPassed: string[],
+    brief?: Brief
+  ):
+    | {
+        type: "loopback";
+        artifacts: Record<string, string>;
+        rejectionCount: number;
+        toIndex: number;
+      }
+    | { type: "blocked"; state: RunState }
+    | { type: "passed" } {
+    if (outcome.type === "loopback") {
+      return outcome;
+    }
+    if (outcome.type === "blocked") {
+      return {
+        type: "blocked",
+        state: {
+          brief,
+          runId: options.runId,
+          lane: options.lane,
+          currentStage: stageName,
+          gatesPassed,
+          rejectionCount: outcome.rejectionCount,
+          status: "blocked",
+        },
+      };
+    }
+    return { type: "passed" };
   }
 
   private async runReviewerStage(
@@ -233,7 +310,8 @@ export class WorkflowEngine {
     runId: string,
     repoPath: string | undefined,
     maxRetries: number,
-    saveArtifact: (stageId: string, content: string) => Promise<void>
+    saveArtifact: (stageId: string, content: string) => Promise<void>,
+    brief?: Brief
   ): Promise<ReviewOutcome> {
     const reviewerArtifacts = { ...artifacts };
     if (repoPath) {
@@ -243,6 +321,7 @@ export class WorkflowEngine {
       stageId: stage.name,
       runId,
       artifacts: reviewerArtifacts,
+      brief,
     });
 
     if (
@@ -301,12 +380,14 @@ export class WorkflowEngine {
     repoPath: string | undefined,
     featureBranch: string,
     mergeGate: ((runId: string) => Promise<"approve" | "deny">) | undefined,
-    saveArtifact: (stageId: string, content: string) => Promise<void>
+    saveArtifact: (stageId: string, content: string) => Promise<void>,
+    brief?: Brief
   ): Promise<boolean> {
     const action = await runtime.execute({
       stageId: stage.name,
       runId,
       artifacts: { ...artifacts },
+      brief,
     });
 
     if (action.content) {
@@ -348,12 +429,14 @@ export class WorkflowEngine {
     runId: string,
     artifacts: Record<string, string>,
     repoPath: string | undefined,
-    saveArtifact: (stageId: string, content: string) => Promise<void>
+    saveArtifact: (stageId: string, content: string) => Promise<void>,
+    brief?: Brief
   ): Promise<DefaultStageOutcome> {
     const action = await runtime.execute({
       stageId: stage.name,
       runId,
       artifacts: { ...artifacts },
+      brief,
     });
 
     if (action.type === "blocked") {
