@@ -13,6 +13,7 @@ import type {
   BranchType,
   ExecutionAdapter,
   Lane,
+  ProgressEvent,
   RunState,
   StageDefinition,
 } from "./types";
@@ -29,7 +30,7 @@ type ReviewOutcome =
 
 type DefaultStageOutcome =
   | { type: "blocked" }
-  | { type: "completed"; artifacts: Record<string, string> };
+  | { type: "completed"; artifacts: Record<string, string>; content: string };
 
 interface RunOptions {
   adapter?: ExecutionAdapter;
@@ -40,6 +41,7 @@ interface RunOptions {
   lane: Lane;
   maxRetries?: number;
   mergeGate?: (runId: string) => Promise<"approve" | "deny">;
+  onProgress?: (event: ProgressEvent) => void;
   repoPath?: string;
   reviewerRuntime?: AgentRuntime;
   runId: string;
@@ -64,7 +66,9 @@ export class WorkflowEngine {
     if (options.repoPath && needsBranch && !options.startIndex) {
       await createFeatureBranch(options.repoPath, branchType, options.runId);
     }
-    return this.executeStages(options, artifacts, featureBranch);
+    const state = await this.executeStages(options, artifacts, featureBranch);
+    options.onProgress?.({ type: "run-completed", state });
+    return state;
   }
 
   private async executeStages(
@@ -78,9 +82,13 @@ export class WorkflowEngine {
     let workerStageIndex = -1;
     let preWorkerArtifacts: Record<string, string> = {};
 
+    const emit = options.onProgress;
+
     let i = options.startIndex ?? 0;
     while (i < options.stages.length) {
       const stage = options.stages[i];
+
+      emit?.({ type: "stage-started", stage: stage.name });
 
       if (stage.role === "worker") {
         workerStageIndex = i;
@@ -119,6 +127,7 @@ export class WorkflowEngine {
             status: "blocked",
           };
         }
+        emit?.({ type: "stage-completed", stage: stage.name, content: "" });
         gatesPassed.push(stage.name);
         i++;
         continue;
@@ -136,6 +145,7 @@ export class WorkflowEngine {
             status: "blocked",
           };
         }
+        emit?.({ type: "stage-completed", stage: stage.name, content: "" });
         gatesPassed.push(stage.name);
         i++;
         continue;
@@ -163,6 +173,7 @@ export class WorkflowEngine {
             featureBranch,
           };
         }
+        emit?.({ type: "stage-completed", stage: stage.name, content: "" });
         gatesPassed.push(stage.name);
         return {
           runId: options.runId,
@@ -193,6 +204,11 @@ export class WorkflowEngine {
           status: "blocked",
         };
       }
+      emit?.({
+        type: "stage-completed",
+        stage: stage.name,
+        content: result.content,
+      });
       artifacts = result.artifacts;
       i++;
     }
@@ -351,7 +367,11 @@ export class WorkflowEngine {
       await saveArtifact(stage.name, action.content);
       updated[stage.name] = action.content;
     }
-    return { type: "completed", artifacts: updated };
+    return {
+      type: "completed",
+      artifacts: updated,
+      content: action.content ?? "",
+    };
   }
 
   private async applyWorkerEdits(

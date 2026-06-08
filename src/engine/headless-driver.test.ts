@@ -590,6 +590,92 @@ describe("Durable-layer seeding", () => {
   });
 });
 
+describe("Progress events", () => {
+  test("onProgress receives stage-started before each stage runs", async () => {
+    const events: import("./types").ProgressEvent[] = [];
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found" },
+      fix: { type: "text", content: "fixed" },
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+      onProgress: (e) => events.push(e),
+    });
+
+    expect(
+      events
+        .filter((e) => e.type === "stage-started")
+        .map((e) => (e as { type: "stage-started"; stage: string }).stage)
+    ).toEqual(["diagnose", "fix"]);
+  });
+
+  test("onProgress receives stage-completed after each stage with artifact content", async () => {
+    const events: import("./types").ProgressEvent[] = [];
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found the bug" },
+      fix: { type: "text", content: "applied the fix" },
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }, { name: "fix" }],
+      runtime,
+      onProgress: (e) => events.push(e),
+    });
+
+    const completed = events.filter(
+      (e) => e.type === "stage-completed"
+    ) as Array<{ type: "stage-completed"; stage: string; content: string }>;
+    expect(
+      completed.map((e) => ({ stage: e.stage, content: e.content }))
+    ).toEqual([
+      { stage: "diagnose", content: "found the bug" },
+      { stage: "fix", content: "applied the fix" },
+    ]);
+  });
+
+  test("onProgress receives run-completed at the end with final RunState", async () => {
+    const events: import("./types").ProgressEvent[] = [];
+
+    const state = await driver.startRun({
+      ...QUICK_CHANGE_NOOP,
+      onProgress: (e) => events.push(e),
+    });
+
+    const completed = events.find((e) => e.type === "run-completed") as
+      | { type: "run-completed"; state: import("./types").RunState }
+      | undefined;
+    expect(completed).toBeDefined();
+    expect(completed?.state).toEqual(state);
+  });
+
+  test("stage-started fires before stage-completed for the same stage", async () => {
+    const order: string[] = [];
+    const runtime = new FakeAgentRuntime({
+      diagnose: { type: "text", content: "found" },
+    });
+
+    await driver.startRun({
+      repoKey: TEST_REPO_KEY,
+      lane: "quick-change",
+      stages: [{ name: "diagnose" }],
+      runtime,
+      onProgress: (e) => {
+        if (e.type === "stage-started" || e.type === "stage-completed") {
+          order.push(e.type);
+        }
+      },
+    });
+
+    expect(order).toEqual(["stage-started", "stage-completed"]);
+  });
+});
+
 describe("Skeleton invariants", () => {
   test("fresh session: each stage receives only its own stageId and accumulated prior outputs", async () => {
     const runtime = new CapturingSequencedRuntime({

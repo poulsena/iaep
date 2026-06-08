@@ -66,6 +66,12 @@ export interface ReachControlOptions {
   gatedTools?: string[];
 }
 
+export type ProgressEvent =
+  | { type: "stage-started"; stage: string }
+  | { type: "stage-completed"; stage: string; content: string }
+  | { type: "gate"; gateType: "approval" | "merge" }
+  | { type: "run-completed"; state: RunState };
+
 export interface StartRunOptions {
   adapter?: ExecutionAdapter;
   approver?: (
@@ -76,6 +82,7 @@ export interface StartRunOptions {
   lane: Lane;
   maxRetries?: number;
   mergeGate?: (runId: string) => Promise<"approve" | "deny">;
+  onProgress?: (event: ProgressEvent) => void;
   reachControl?: ReachControlOptions;
   repoKey: string;
   repoPath?: string;
