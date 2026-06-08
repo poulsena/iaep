@@ -35,8 +35,14 @@ export class ClaudeAgentRuntime implements AgentRuntime {
       throw new Error("No text block in Claude response");
     }
 
-    return JSON.parse(textBlock.text) as AgentAction;
+    return JSON.parse(stripCodeFences(textBlock.text)) as AgentAction;
   }
+}
+
+const CODE_FENCE_RE = /^```[\w]*\n?([\s\S]*?)```\s*$/;
+
+function stripCodeFences(text: string): string {
+  return text.replace(CODE_FENCE_RE, "$1").trim();
 }
 
 function buildUserMessage(input: StageInput): string {
