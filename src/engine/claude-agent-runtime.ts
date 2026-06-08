@@ -46,7 +46,13 @@ function stripCodeFences(text: string): string {
 }
 
 function buildUserMessage(input: StageInput): string {
-  const parts = [`Stage: ${input.stageId}`, `Run: ${input.runId}`];
+  const parts: string[] = [];
+
+  if (input.brief) {
+    parts.push(`Brief: ${input.brief.text}`);
+  }
+
+  parts.push(`Stage: ${input.stageId}`, `Run: ${input.runId}`);
 
   const entries = Object.entries(input.artifacts);
   if (entries.length > 0) {

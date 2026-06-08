@@ -33,6 +33,10 @@ _Avoid_: permissions, sandbox (sandbox is the isolation boundary, a different co
 The universal, project-type-agnostic core that drives a run through its stages. Always drivable headless via a programmatic driver; any GUI is a thin client over that driver, never the engine itself.
 _Avoid_: orchestrator, pipeline.
 
+**Brief**:
+The user-authored statement of intent that seeds a run — the raw input the first stage consumes. Lane-neutral: a quick-change brief and a full-feature brief both make sense. Free text in v1, but modeled as a small structured value so a later source (a tracked work item) is additive.
+_Avoid_: task, prompt, issue (an issue is a tracked GitHub Issue; "issue breakdown" is an in-flight artifact — both are distinct from the brief that seeds a run).
+
 **Stage**:
 A state in the workflow engine's linear state-machine (Idea, PRD, Kanban, Implementation, QA, Merge & Distill), with an entry gate, an exit gate, and a bound role.
 _Avoid_: step, phase (phase means a build-plan milestone).

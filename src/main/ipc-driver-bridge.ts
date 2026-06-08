@@ -20,7 +20,13 @@ interface WebContentsLike {
 
 type StartRunPayload = Pick<
   StartRunOptions,
-  "repoKey" | "lane" | "stages" | "repoPath" | "branchType" | "maxRetries"
+  | "repoKey"
+  | "lane"
+  | "stages"
+  | "repoPath"
+  | "branchType"
+  | "maxRetries"
+  | "brief"
 >;
 
 export class IpcDriverBridge {

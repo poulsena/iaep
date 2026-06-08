@@ -1,6 +1,10 @@
 export type Lane = "quick-change" | "full-feature";
 export type BranchType = "feature" | "fix" | "chore" | "refactor" | "docs";
 
+export interface Brief {
+  text: string;
+}
+
 export interface BuildResult {
   output: string;
   success: boolean;
@@ -22,6 +26,7 @@ export interface StageDefinition {
 }
 
 export interface RunState {
+  brief?: Brief;
   currentStage: string;
   featureBranch?: string;
   gatesPassed: string[];
@@ -45,6 +50,7 @@ export interface AgentAction {
 
 export interface StageInput {
   artifacts: Record<string, string>;
+  brief?: Brief;
   runId: string;
   stageId: string;
 }
@@ -79,6 +85,7 @@ export interface StartRunOptions {
     action: AgentAction
   ) => Promise<"approve" | "deny">;
   branchType?: BranchType;
+  brief?: Brief;
   lane: Lane;
   maxRetries?: number;
   mergeGate?: (runId: string) => Promise<"approve" | "deny">;

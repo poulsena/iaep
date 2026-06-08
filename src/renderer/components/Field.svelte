@@ -7,14 +7,16 @@
     placeholder = "",
     type = "text",
     options = [],
+    rows = 4,
     disabled = false,
     onpick,
   }: {
     label: string;
     value?: string;
     placeholder?: string;
-    type?: "text" | "select";
+    type?: "text" | "select" | "textarea";
     options?: string[];
+    rows?: number;
     disabled?: boolean;
     onpick?: () => Promise<string | undefined>;
   } = $props();
@@ -36,6 +38,14 @@
         <option value={opt}>{opt}</option>
       {/each}
     </select>
+  {:else if type === "textarea"}
+    <textarea
+      class="field__input field__input--textarea"
+      bind:value
+      {placeholder}
+      {rows}
+      disabled={isDisabled}
+    ></textarea>
   {:else if onpick}
     <div class="field__row">
       <input class="field__input" {type} bind:value {placeholder} disabled={isDisabled} />
@@ -82,6 +92,12 @@
     width: 100%;
     box-sizing: border-box;
     appearance: none;
+  }
+
+  .field__input--textarea {
+    resize: vertical;
+    min-height: 4.5rem;
+    line-height: 1.5;
   }
 
   .field__input:focus {

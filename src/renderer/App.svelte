@@ -30,6 +30,7 @@
 
   let repoPath = $state("");
   let lane = $state("quick-change");
+  let brief = $state("");
 
   const formStatus = $derived($status === "running" ? "running" : "idle");
 
@@ -44,9 +45,9 @@
   );
 
   function handleStart() {
-    if (!repoPath) return;
+    if (!repoPath || !brief.trim()) return;
     const repoKey = repoPath.split("/").filter(Boolean).at(-1) ?? repoPath;
-    start({ repoKey, repoPath, lane: lane as Lane, stages: STAGES[lane as Lane] });
+    start({ repoKey, repoPath, lane: lane as Lane, stages: STAGES[lane as Lane], brief: { text: brief } });
   }
 </script>
 
@@ -69,7 +70,13 @@
         options={["quick-change", "full-feature"]}
         bind:value={lane}
       />
-      <Button variant="primary">
+      <Field
+        label="Brief"
+        type="textarea"
+        bind:value={brief}
+        placeholder="Describe what you want done…"
+      />
+      <Button variant="primary" disabled={!brief.trim()}>
         {$status === "running" ? "Running…" : "Start run"}
       </Button>
     </Form>
