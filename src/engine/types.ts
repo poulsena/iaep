@@ -96,4 +96,5 @@ export interface StartRunOptions {
   reviewerRuntime?: AgentRuntime;
   runtime?: AgentRuntime;
   stages: StageDefinition[];
+  workerRuntime?: AgentRuntime;
 }

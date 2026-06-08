@@ -29,6 +29,7 @@ export class HeadlessDriver {
     const runId = crypto.randomUUID();
     let runtime: AgentRuntime = options.runtime ?? NOOP_RUNTIME;
     let reviewerRuntime = options.reviewerRuntime;
+    const workerRuntime = options.workerRuntime;
     const adapter =
       options.adapter ??
       (options.repoPath
@@ -83,6 +84,7 @@ export class HeadlessDriver {
       stages: options.stages,
       runtime,
       reviewerRuntime,
+      workerRuntime,
       adapter,
       brief: options.brief,
       repoPath: options.repoPath,

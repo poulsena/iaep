@@ -16,7 +16,9 @@
     "quick-change": [
       { name: "diagnose" },
       { name: "fix", role: "worker" },
+      { name: "review", role: "reviewer" },
       { name: "qa", role: "qa" },
+      { name: "distill", role: "librarian" },
     ],
     "full-feature": [
       { name: "diagnose" },
