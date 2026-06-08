@@ -5,8 +5,8 @@ describe("Wsl2ExecutionAdapter", () => {
   test("build returns success when command exits 0", async () => {
     const adapter = new Wsl2ExecutionAdapter({
       repoPath: process.cwd(),
-      buildCommand: ["true"],
-      testCommand: ["true"],
+      buildCommand: ["bun", "-e", "process.exit(0)"],
+      testCommand: ["bun", "-e", "process.exit(0)"],
     });
     const result = await adapter.build();
     expect(result.success).toBe(true);
@@ -15,8 +15,8 @@ describe("Wsl2ExecutionAdapter", () => {
   test("test returns failure when command exits non-zero", async () => {
     const adapter = new Wsl2ExecutionAdapter({
       repoPath: process.cwd(),
-      buildCommand: ["true"],
-      testCommand: ["false"],
+      buildCommand: ["bun", "-e", "process.exit(0)"],
+      testCommand: ["bun", "-e", "process.exit(1)"],
     });
     const result = await adapter.test();
     expect(result.success).toBe(false);
@@ -25,8 +25,8 @@ describe("Wsl2ExecutionAdapter", () => {
   test("output is captured from stdout", async () => {
     const adapter = new Wsl2ExecutionAdapter({
       repoPath: process.cwd(),
-      buildCommand: ["echo", "hello-build"],
-      testCommand: ["true"],
+      buildCommand: ["bun", "-e", "console.log('hello-build')"],
+      testCommand: ["bun", "-e", "process.exit(0)"],
     });
     const result = await adapter.build();
     expect(result.output).toContain("hello-build");
