@@ -2,6 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { InFlightStore } from "./inflight-store";
 import { NoopAgentRuntime } from "./noop-agent-runtime";
+import { detectConventionalAdapter } from "./project-detector";
 import { ReachControlRuntime } from "./reach-control-runtime";
 import type {
   AgentRuntime,
@@ -28,6 +29,11 @@ export class HeadlessDriver {
     const runId = crypto.randomUUID();
     let runtime: AgentRuntime = options.runtime ?? NOOP_RUNTIME;
     let reviewerRuntime = options.reviewerRuntime;
+    const adapter =
+      options.adapter ??
+      (options.repoPath
+        ? await detectConventionalAdapter(options.repoPath)
+        : undefined);
 
     if (options.reachControl) {
       const allowedDirs = [
@@ -77,7 +83,7 @@ export class HeadlessDriver {
       stages: options.stages,
       runtime,
       reviewerRuntime,
-      adapter: options.adapter,
+      adapter,
       repoPath: options.repoPath,
       branchType: options.branchType,
       maxRetries: options.maxRetries,
