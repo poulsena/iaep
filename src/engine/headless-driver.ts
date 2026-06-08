@@ -88,6 +88,7 @@ export class HeadlessDriver {
       branchType: options.branchType,
       maxRetries: options.maxRetries,
       mergeGate: options.mergeGate,
+      onProgress: options.onProgress,
       saveArtifact: (stageId, content) =>
         this.store.saveArtifact(options.repoKey, runId, stageId, content),
     });

@@ -28,6 +28,19 @@ export default defineConfig({
           },
         },
       },
+      {
+        extends: true,
+        test: {
+          name: "renderer",
+          include: ["src/renderer/**/*.test.ts"],
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright({}),
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
     ],
   },
 });

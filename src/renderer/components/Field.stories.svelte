@@ -19,3 +19,11 @@
     value="quick-change"
   />
 </Story>
+
+<Story name="Text with Picker">
+  <Field
+    label="Repository path"
+    placeholder="/home/user/project"
+    onpick={() => Promise.resolve("/home/user/my-project")}
+  />
+</Story>

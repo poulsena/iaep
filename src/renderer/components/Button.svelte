@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getContext } from "svelte";
   import type { Snippet } from "svelte";
 
   let {
@@ -12,9 +13,12 @@
     children?: Snippet;
     onclick?: () => void;
   } = $props();
+
+  const form = getContext<{ disabled: boolean } | undefined>("form");
+  const isDisabled = $derived(disabled || (form?.disabled ?? false));
 </script>
 
-<button class="btn btn--{variant}" {disabled} {onclick}>
+<button class="btn btn--{variant}" disabled={isDisabled} {onclick}>
   {@render children?.()}
 </button>
 
